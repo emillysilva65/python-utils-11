@@ -1,34 +1,28 @@
 const fs = require('fs');
 const path = require('path');
+const { createLogger, format, transports } = require('winston');
 
-class Logger {
-    constructor(logDir, maxSize) {
-        this.logDir = logDir;
-        this.maxSize = maxSize;
-        this.currentLogFile = path.join(logDir, 'app.log');
-        this.logStream = fs.createWriteStream(this.currentLogFile, { flags: 'a' });
-    }
-
-    log(message) {
-        const logMessage = `${new Date().toISOString()} - ${message}\n`;
-        this.logStream.write(logMessage);
-        this.checkRotation();
-    }
-
-    checkRotation() {
-        const stats = fs.statSync(this.currentLogFile);
-        if (stats.size > this.maxSize) {
-            this.rotateLogs();
-        }
-    }
-
-    rotateLogs() {
-        const timestamp = new Date().toISOString().replace(/[:]/g, '-');
-        const newLogFileName = path.join(this.logDir, `app-${timestamp}.log`);
-        fs.renameSync(this.currentLogFile, newLogFileName);
-        this.logStream.end();
-        this.logStream = fs.createWriteStream(this.currentLogFile, { flags: 'a' });
-    }
+const logDirectory = path.join(__dirname, 'logs');
+if (!fs.existsSync(logDirectory)) {
+    fs.mkdirSync(logDirectory);
 }
 
-module.exports = Logger;
+const transportOptions = new transports.File({
+    filename: path.join(logDirectory, 'app.log'),
+    maxSize: '10m',
+    maxFiles: '5',
+    tailable: true,
+    level: 'info'
+});
+
+const logger = createLogger({
+    format: format.combine(
+        format.timestamp(),
+        format.json()
+    ),
+    transports: [transportOptions]
+});
+
+logger.info('Logger initialized');
+
+module.exports = logger;
