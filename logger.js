@@ -1,28 +1,41 @@
-const fs = require('fs');
-const path = require('path');
-const { createLogger, format, transports } = require('winston');
+class Logger {
+    constructor(logLevel = 'info') {
+        this.logLevel = logLevel;
+        this.levels = {
+            debug: 0,
+            info: 1,
+            warn: 2,
+            error: 3
+        };
+    }
 
-const logDirectory = path.join(__dirname, 'logs');
-if (!fs.existsSync(logDirectory)) {
-    fs.mkdirSync(logDirectory);
+    log(message, level = 'info') {
+        if (this.levels[level] >= this.levels[this.logLevel]) {
+            const timestamp = new Date().toISOString();
+            console.log(`[${timestamp}] [${level.toUpperCase()}]: ${message}`);
+        }
+    }
+
+    debug(message) {
+        this.log(message, 'debug');
+    }
+    info(message) {
+        this.log(message, 'info');
+    }
+    warn(message) {
+        this.log(message, 'warn');
+    }
+    error(message) {
+        this.log(message, 'error');
+    }
 }
 
-const transportOptions = new transports.File({
-    filename: path.join(logDirectory, 'app.log'),
-    maxSize: '10m',
-    maxFiles: '5',
-    tailable: true,
-    level: 'info'
-});
+const logger = new Logger('debug');
 
-const logger = createLogger({
-    format: format.combine(
-        format.timestamp(),
-        format.json()
-    ),
-    transports: [transportOptions]
-});
-
-logger.info('Logger initialized');
+// Sample usage
+logger.debug('This is a debug message.');
+logger.info('Informational message.');
+logger.warn('Warning: Check this out!');
+logger.error('Error occurred!');
 
 module.exports = logger;
