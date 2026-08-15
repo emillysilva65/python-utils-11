@@ -1,41 +1,34 @@
-class Logger {
-    constructor(logLevel = 'info') {
-        this.logLevel = logLevel;
-        this.levels = {
-            debug: 0,
-            info: 1,
-            warn: 2,
-            error: 3
-        };
-    }
+const fs = require('fs');
+const path = require('path');
+const { format, createLogger, transports } = require('winston');
 
-    log(message, level = 'info') {
-        if (this.levels[level] >= this.levels[this.logLevel]) {
-            const timestamp = new Date().toISOString();
-            console.log(`[${timestamp}] [${level.toUpperCase()}]: ${message}`);
-        }
-    }
-
-    debug(message) {
-        this.log(message, 'debug');
-    }
-    info(message) {
-        this.log(message, 'info');
-    }
-    warn(message) {
-        this.log(message, 'warn');
-    }
-    error(message) {
-        this.log(message, 'error');
-    }
+const logDirectory = path.resolve(__dirname, 'logs');
+if (!fs.existsSync(logDirectory)) {
+    fs.mkdirSync(logDirectory);
 }
 
-const logger = new Logger('debug');
+const createLogFileName = () => {
+    const date = new Date();
+    return `crypto-log-${date.toISOString().split('T')[0]}.log`;
+};
 
-// Sample usage
-logger.debug('This is a debug message.');
-logger.info('Informational message.');
-logger.warn('Warning: Check this out!');
-logger.error('Error occurred!');
+const logger = createLogger({
+    level: 'info',
+    format: format.combine(
+        format.timestamp(),
+        format.printf(({ timestamp, level, message }) => {
+            return `${timestamp} ${level}: ${message}`;
+        })
+    ),
+    transports: [
+        new transports.File({
+            filename: path.join(logDirectory, createLogFileName()),
+            maxsize: 5 * 1024 * 1024,
+            maxFiles: '14d',
+            tailable: true,
+        }),
+        new transports.Console(),
+    ],
+});
 
 module.exports = logger;
