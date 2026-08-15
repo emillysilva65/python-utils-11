@@ -1,26 +1,42 @@
-const fetchWithRetry = async (url, options = {}, retries = 3, backoff = 300) => {
-    try {
-        const response = await fetch(url, options);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return await response.json();
-    } catch (error) {
-        if (retries > 0) {
-            console.warn(`Fetch failed, retrying... (${retries} tries left)`);
-            await new Promise(res => setTimeout(res, backoff));
-            return fetchWithRetry(url, options, retries - 1, backoff * 2);
-        } else {
-            console.error('Max retries reached. Error:', error);
-            throw error;
-        }
+// Function to convert a hexadecimal string to a byte array
+function hexToBytes(hex) {
+    if (typeof hex !== 'string') throw new TypeError('Input must be a string');
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < hex.length; i += 2) {
+        bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
     }
-};
+    return bytes;
+}
 
-const fetchCryptoPrice = async (crypto) => {
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${crypto}&vs_currencies=usd`;
-    return await fetchWithRetry(url);
-};
+// Function to convert a byte array to a hexadecimal string
+function bytesToHex(bytes) {
+    if (!(bytes instanceof Uint8Array)) throw new TypeError('Input must be a Uint8Array');
+    return Array.from(bytes).map(byte => {
+        return ('0' + byte.toString(16)).slice(-2);
+    }).join('');
+}
 
-// Example usage
-// fetchCryptoPrice('bitcoin').then(data => console.log(data)).catch(err => console.error(err));
+/**
+ * Generates a random hexadecimal string of specified length.
+ * @param {number} length - Length of the string to generate.
+ * @returns {string} Random hexadecimal string.
+ */
+function randomHex(length) {
+    if (typeof length !== 'number' || length <= 0) throw new TypeError('Length must be a positive number');
+    let result = '';
+    for (let i = 0; i < length; i++) {
+        result += Math.floor(Math.random() * 16).toString(16);
+    }
+    return result;
+}
+
+/**
+ * Checks if a string is a valid hexadecimal representation.
+ * @param {string} hex - String to check.
+ * @returns {boolean} True if valid, false otherwise.
+ */
+function isValidHex(hex) {
+    return /^([0-9a-fA-F]{2})+$/.test(hex);
+}
+
+module.exports = { hexToBytes, bytesToHex, randomHex, isValidHex };
