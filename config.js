@@ -1,35 +1,38 @@
+// Configuration for crypto utilities
+
+/**
+ * Stores configuration settings for the crypto application.
+ * @typedef {Object} Config
+ * @property {string} apiUrl - The base API URL for cryptocurrency data.
+ * @property {string} apiKey - The API key for authentication.
+ * @property {number} refreshRate - The rate (in milliseconds) to refresh data.
+ */
+
+/**
+ * @type {Config}
+ */
 const config = {
-    apiUrl: 'https://api.crypto.com',
-    timeout: 5000,
-    maxRetries: 3,
+    apiUrl: 'https://api.crypto.example.com',
+    apiKey: 'your-api-key',
+    refreshRate: 60000 // 1 minute
 };
 
-const handleError = (error) => {
-    console.error('An error occurred:', error.message);
-    if (error.code === 'ECONNREFUSED') {
-        console.error('Connection refused. Check your API URL.');
-    } else if (error.code === 'ETIMEDOUT') {
-        console.error('Request timed out. Increasing timeout...');
-        config.timeout += 2000; // add extra timeout
-    } else {
-        console.error('Unexpected error type. Retrying...');
-    }
-};
+/**
+ * Get configuration setting.
+ * @param {keyof Config} key - The configuration key to retrieve.
+ * @returns {string | number} - The value of the configuration key.
+ */
+function getConfig(key) {
+    return config[key];
+}
 
-const fetchWithRetries = async (url, options, retries = config.maxRetries) => {
-    try {
-        const response = await fetch(url, options);
-        if (!response.ok) throw new Error('Network response was not ok');
-        return await response.json();
-    } catch (error) {
-        handleError(error);
-        if (retries > 0) {
-            console.log(`Retrying... Attempts left: ${retries}`);
-            return fetchWithRetries(url, options, retries - 1);
-        } else {
-            throw new Error('Max retries reached');
-        }
-    }
-};
+/**
+ * Set configuration setting.
+ * @param {keyof Config} key - The configuration key to set.
+ * @param {string | number} value - The value to set for the configuration key.
+ */
+function setConfig(key, value) {
+    config[key] = value;
+}
 
-export { config, fetchWithRetries };
+export { getConfig, setConfig };
