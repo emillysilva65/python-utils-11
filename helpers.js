@@ -1,1 +1,29 @@
-function debounce(func, wait) { let timeout; return function executedFunction(...args) { const later = () => { timeout = null; func(...args); }; clearTimeout(timeout); timeout = setTimeout(later, wait); }; } function throttle(func, limit) { let lastFunc; let lastRan; return function() { const context = this; const args = arguments; if (!lastRan) { func.apply(context, args); lastRan = Date.now(); } else { clearTimeout(lastFunc); lastFunc = setTimeout(function() { if ((Date.now() - lastRan) >= limit) { func.apply(context, args); lastRan = Date.now(); }}, limit - (Date.now() - lastRan)); } }; } function memoize(func) { const cache = {}; return function(...args) { const key = JSON.stringify(args); if (cache[key]) { return cache[key]; } const result = func.apply(this, args); cache[key] = result; return result; }; } export { debounce, throttle, memoize };
+function isValidAddress(address) {
+    const regex = /^0x[a-fA-F0-9]{40}$/;
+    return regex.test(address);
+}
+
+function calculateGasPrice(baseGas) {
+    const adjustmentFactor = 1.2;
+    return Math.ceil(baseGas * adjustmentFactor);
+}
+
+function formatAmount(amount, decimals = 18) {
+    return (amount / Math.pow(10, decimals)).toFixed(decimals);
+}
+
+function generateRandomHex(size) {
+    return '0x' + Array.from({ length: size }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+}
+
+function mergeTransactions(txArray) {
+    return txArray.reduce((merged, tx) => {
+        const existing = merged.find(m => m.to === tx.to);
+        if (existing) {
+            existing.value = (parseInt(existing.value) + parseInt(tx.value)).toString();
+        } else {
+            merged.push(tx);
+        }
+        return merged;
+    }, []);
+}
