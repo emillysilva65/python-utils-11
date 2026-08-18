@@ -3,27 +3,31 @@ function isValidAddress(address) {
     return regex.test(address);
 }
 
-function calculateGasPrice(baseGas) {
-    const adjustmentFactor = 1.2;
-    return Math.ceil(baseGas * adjustmentFactor);
+function isValidAmount(amount) {
+    return typeof amount === 'number' && amount > 0;
 }
 
-function formatAmount(amount, decimals = 18) {
-    return (amount / Math.pow(10, decimals)).toFixed(decimals);
+function processTransaction(address, amount) {
+    if (!isValidAddress(address)) {
+        throw new Error('Invalid address format');
+    }
+    if (!isValidAmount(amount)) {
+        throw new Error('Invalid amount');
+    }
+    // Main processing logic here
+    console.log(`Processing transaction to ${address} for amount ${amount}`);
 }
 
-function generateRandomHex(size) {
-    return '0x' + Array.from({ length: size }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-}
+const transactions = [
+    { address: '0x1234567890abcdef1234567890abcdef12345678', amount: 10 },
+    { address: 'invalid_address', amount: 5 },
+    { address: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdef', amount: -20 }
+];
 
-function mergeTransactions(txArray) {
-    return txArray.reduce((merged, tx) => {
-        const existing = merged.find(m => m.to === tx.to);
-        if (existing) {
-            existing.value = (parseInt(existing.value) + parseInt(tx.value)).toString();
-        } else {
-            merged.push(tx);
-        }
-        return merged;
-    }, []);
-}
+transactions.forEach(tx => {
+    try {
+        processTransaction(tx.address, tx.amount);
+    } catch (error) {
+        console.error(`Failed to process transaction: ${error.message}`);
+    }
+});
