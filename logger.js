@@ -1,34 +1,24 @@
-const fs = require('fs');
-const path = require('path');
-const { format, createLogger, transports } = require('winston');
+// Simple logger utility for crypto applications
 
-const logDirectory = path.resolve(__dirname, 'logs');
-if (!fs.existsSync(logDirectory)) {
-    fs.mkdirSync(logDirectory);
+class Logger {
+    constructor() {
+        this.logs = [];
+    }
+
+    log(message) {
+        const timestamp = new Date().toISOString();
+        this.logs.push(`${timestamp} - ${message}`);
+        console.log(this.logs[this.logs.length - 1]);
+    }
+
+    getLogs() {
+        return this.logs;
+    }
+
+    clearLogs() {
+        this.logs = [];
+    }
 }
 
-const createLogFileName = () => {
-    const date = new Date();
-    return `crypto-log-${date.toISOString().split('T')[0]}.log`;
-};
-
-const logger = createLogger({
-    level: 'info',
-    format: format.combine(
-        format.timestamp(),
-        format.printf(({ timestamp, level, message }) => {
-            return `${timestamp} ${level}: ${message}`;
-        })
-    ),
-    transports: [
-        new transports.File({
-            filename: path.join(logDirectory, createLogFileName()),
-            maxsize: 5 * 1024 * 1024,
-            maxFiles: '14d',
-            tailable: true,
-        }),
-        new transports.Console(),
-    ],
-});
-
-module.exports = logger;
+const logger = new Logger();
+export default logger;
