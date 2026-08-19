@@ -1,38 +1,22 @@
-// Configuration for crypto utilities
+const fs = require('fs');
+const path = require('path');
 
-/**
- * Stores configuration settings for the crypto application.
- * @typedef {Object} Config
- * @property {string} apiUrl - The base API URL for cryptocurrency data.
- * @property {string} apiKey - The API key for authentication.
- * @property {number} refreshRate - The rate (in milliseconds) to refresh data.
- */
-
-/**
- * @type {Config}
- */
-const config = {
-    apiUrl: 'https://api.crypto.example.com',
-    apiKey: 'your-api-key',
-    refreshRate: 60000 // 1 minute
+const defaultConfig = {
+    apiEndpoint: 'https://api.default.com',
+    timeout: 5000,
+    retries: 3,
+    logLevel: 'info'
 };
 
-/**
- * Get configuration setting.
- * @param {keyof Config} key - The configuration key to retrieve.
- * @returns {string | number} - The value of the configuration key.
- */
-function getConfig(key) {
-    return config[key];
+function loadConfig(filePath) {
+    const fullPath = path.resolve(filePath);
+    try {
+        const userConfig = JSON.parse(fs.readFileSync(fullPath, 'utf-8'));
+        return { ...defaultConfig, ...userConfig };
+    } catch (error) {
+        console.error('Error loading config:', error);
+        return defaultConfig;
+    }
 }
 
-/**
- * Set configuration setting.
- * @param {keyof Config} key - The configuration key to set.
- * @param {string | number} value - The value to set for the configuration key.
- */
-function setConfig(key, value) {
-    config[key] = value;
-}
-
-export { getConfig, setConfig };
+module.exports = { loadConfig };
