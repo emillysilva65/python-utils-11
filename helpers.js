@@ -1,33 +1,42 @@
-function isValidAddress(address) {
-    const regex = /^0x[a-fA-F0-9]{40}$/;
-    return regex.test(address);
-}
-
-function isValidAmount(amount) {
-    return typeof amount === 'number' && amount > 0;
-}
-
-function processTransaction(address, amount) {
-    if (!isValidAddress(address)) {
-        throw new Error('Invalid address format');
+const crypto = require('crypto');
+function withNetworkRetry(networkFn, options = {}) {
+  const maxRetries = options.maxRetries || 4;
+  const initialDelay = options.initialDelay || 200;
+  return async function(...args) {
+    let lastErr = null;
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return await networkFn(...args);
+      } catch (e) {
+        lastErr = e;
+        if (i === maxRetries - 1) {
+          throw lastErr;
+        }
+        const exponentialDelay = initialDelay * Math.pow(2, i);
+        const hash = crypto.createHash('sha256').update(i + '-' + Date.now()).digest('hex');
+        const extra = parseInt(hash.slice(0, 4), 16) % 400;
+        const totalDelay = exponentialDelay + extra;
+        await new Promise((resolve) => setTimeout(resolve, totalDelay));
+      }
     }
-    if (!isValidAmount(amount)) {
-        throw new Error('Invalid amount');
-    }
-    // Main processing logic here
-    console.log(`Processing transaction to ${address} for amount ${amount}`);
+    throw lastErr;
+  };
 }
-
-const transactions = [
-    { address: '0x1234567890abcdef1234567890abcdef12345678', amount: 10 },
-    { address: 'invalid_address', amount: 5 },
-    { address: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdef', amount: -20 }
-];
-
-transactions.forEach(tx => {
-    try {
-        processTransaction(tx.address, tx.amount);
-    } catch (error) {
-        console.error(`Failed to process transaction: ${error.message}`);
-    }
+async function exampleCryptoNetworkCall(symbol) {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      const success = Math.random() > 0.6;
+      if (success) {
+        resolve({ symbol: symbol, price: 42000 + Math.random() * 1000, time: new Date().toISOString() });
+      } else {
+        reject(new Error('Simulated network failure'));
+      }
+    }, 50);
+  });
+}
+const retryableCall = withNetworkRetry(exampleCryptoNetworkCall, { maxRetries: 5, initialDelay: 100 });
+retryableCall('ETH').then(result => {
+  console.log('Retrieved data:', result);
+}).catch(error => {
+  console.error('Operation failed:', error.message);
 });
