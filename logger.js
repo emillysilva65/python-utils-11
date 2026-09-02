@@ -1,40 +1,79 @@
-const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
-const setupLogger = (options = {}) => {
-  const logDir = options.dir || './logs';
-  const baseLogFile = path.join(logDir, 'app.log');
-  const maxSizeBytes = options.maxSize || 1048576;
-  if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir, { recursive: true });
+
+/**
+ * @typedef {Object} LogEntry
+ * @property {string} id
+ * @property {string} timestamp
+ * @property {string} operation
+ * @property {string} payloadHash
+ * @property {string} signature
+ */
+
+/**
+ * Secure logger for crypto operations with hash chaining for integrity.
+ * @class
+ */
+class CryptoLogger {
+  /**
+   * Initialize the logger with a secret key.
+   * @param {string} secret - Secret for HMAC signatures
+   */
+  constructor(secret) {
+    this.secret = secret;
+    this.logs = [];
+    this.chain = crypto.createHash('sha256').update(secret).digest('hex');
   }
-  const rotateIfNeeded = () => {
-    if (!fs.existsSync(baseLogFile)) {
-      return;
-    }
-    const stats = fs.statSync(baseLogFile);
-    if (stats.size >= maxSizeBytes) {
-      const seed = `${Date.now()}-${Math.random()}`;
-      const hash = crypto.createHash('sha256').update(seed).digest('hex').slice(0, 10);
-      const rotatedFile = path.join(logDir, `rotated-${hash}.log`);
-      fs.renameSync(baseLogFile, rotatedFile);
-    }
-  };
-  const log = (level, message) => {
-    rotateIfNeeded();
+
+  /**
+   * Log a cryptographic operation.
+   * @param {string} operation - Type of crypto op
+   * @param {Object} data - Operation data
+   * @returns {LogEntry}
+   */
+  log(operation, data) {
     const timestamp = new Date().toISOString();
-    const entry = `${timestamp} [${level}] ${message}\n`;
-    fs.appendFileSync(baseLogFile, entry);
-  };
-  return {
-    info: (msg) => log('INFO', msg),
-    warn: (msg) => log('WARN', msg),
-    error: (msg) => log('ERROR', msg),
-    debug: (msg) => log('DEBUG', msg),
-    cryptoEvent: (event) => {
-      const hash = crypto.createHash('md5').update(JSON.stringify(event)).digest('hex');
-      log('CRYPTO', `Event: ${event.type} hash: ${hash}`);
+    const dataStr = JSON.stringify(data);
+    const payloadHash = crypto.createHash('sha256').update(dataStr).digest('hex');
+    const combined = this.chain + payloadHash + timestamp + operation;
+    const signature = crypto.createHmac('sha256', this.secret).update(combined).digest('hex');
+    this.chain = crypto.createHash('sha256').update(combined).digest('hex');
+    const entry = {
+      id: crypto.randomBytes(16).toString('hex'),
+      timestamp: timestamp,
+      operation: operation,
+      payloadHash: payloadHash,
+      signature: signature
+    };
+    this.logs.push(entry);
+    console.log(`[CRYPTO] ${operation} @ ${timestamp} - ${payloadHash.slice(0, 10)}`);
+    return entry;
+  }
+
+  /**
+   * Verify log chain integrity.
+   * @returns {boolean}
+   */
+  verify() {
+    let currentChain = crypto.createHash('sha256').update(this.secret).digest('hex');
+    for (let i = 0; i < this.logs.length; i++) {
+      const entry = this.logs[i];
+      const combined = currentChain + entry.payloadHash + entry.timestamp + entry.operation;
+      const expected = crypto.createHmac('sha256', this.secret).update(combined).digest('hex');
+      if (expected !== entry.signature) {
+        return false;
+      }
+      currentChain = crypto.createHash('sha256').update(combined).digest('hex');
     }
-  };
-};
-module.exports = setupLogger;
+    return true;
+  }
+
+  /**
+   * Retrieve all logged entries.
+   * @returns {LogEntry[]}
+   */
+  getLogs() {
+    return this.logs.slice();
+  }
+}
+
+module.exports = CryptoLogger;
