@@ -1,74 +1,43 @@
-const cryptoConfig = {
-  version: '1.0.0',
-  algorithms: {
-    hash: 'simulated-sha256',
-    cipher: 'xor'
-  },
-  lengths: {
-    key: 32,
-    salt: 16
+function validateCryptoInput(input) {
+  if (typeof input !== 'string') return { valid: false, reason: 'must be string' };
+  const trimmed = input.trim();
+  if (trimmed.length === 0) return { valid: false, reason: 'empty input' };
+  let isHex = true;
+  for (let i = 0; i < trimmed.length; i++) {
+    const charCode = trimmed.charCodeAt(i);
+    if (!((charCode >= 48 && charCode <= 57) || (charCode >= 97 && charCode <= 102) || (charCode >= 65 && charCode <= 70))) {
+      isHex = false;
+      break;
+    }
   }
-};
-
-function validateConfig() {
-  if (cryptoConfig.lengths.key < 16) {
-    throw new Error('Key too short');
+  if (!isHex) return { valid: false, reason: 'not valid hex' };
+  if (trimmed.length % 2 !== 0) return { valid: false, reason: 'odd length' };
+  let checksum = 0;
+  for (let i = 0; i < trimmed.length; i += 2) {
+    const byte = parseInt(trimmed.substr(i, 2), 16);
+    checksum ^= byte;
   }
-  return cryptoConfig;
+  if (checksum === 0) return { valid: false, reason: 'invalid checksum' };
+  return { valid: true, data: trimmed.toLowerCase() };
 }
 
-function generateSalt() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let salt = '';
-  for (let i = 0; i < cryptoConfig.lengths.salt; i++) {
-    salt += chars.charAt(Math.floor(Math.random() * chars.length));
+function mainProcessingLoop(inputs) {
+  const results = [];
+  let index = 0;
+  while (index < inputs.length) {
+    const current = inputs[index];
+    const validation = validateCryptoInput(current);
+    if (validation.valid) {
+      const processed = validation.data.split('').reverse().join('');
+      results.push({ input: current, processed, status: 'success' });
+    } else {
+      results.push({ input: current, status: 'invalid', reason: validation.reason });
+    }
+    index++;
   }
-  return salt;
+  return results;
 }
 
-function deriveKey(password, salt) {
-  let key = [];
-  const combined = password + salt;
-  for (let i = 0; i < cryptoConfig.lengths.key; i++) {
-    let val = combined.charCodeAt(i % combined.length);
-    val = ((val * 31) + i) % 256;
-    key.push(val);
-  }
-  return key;
-}
-
-function encrypt(text, password) {
-  const cfg = validateConfig();
-  const salt = generateSalt();
-  const key = deriveKey(password, salt);
-  let encrypted = '';
-  for (let i = 0; i < text.length; i++) {
-    const t = text.charCodeAt(i);
-    const k = key[i % key.length];
-    encrypted += String.fromCharCode(t ^ k);
-  }
-  return btoa(salt + encrypted);
-}
-
-function decrypt(encrypted, password) {
-  const cfg = validateConfig();
-  const combined = atob(encrypted);
-  const salt = combined.slice(0, cryptoConfig.lengths.salt);
-  const encText = combined.slice(cryptoConfig.lengths.salt);
-  const key = deriveKey(password, salt);
-  let decrypted = '';
-  for (let i = 0; i < encText.length; i++) {
-    const e = encText.charCodeAt(i);
-    const k = key[i % key.length];
-    decrypted += String.fromCharCode(e ^ k);
-  }
-  return decrypted;
-}
-
-module.exports = {
-  cryptoConfig,
-  encrypt,
-  decrypt,
-  deriveKey,
-  generateSalt
-};
+const sampleInputs = ['a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4', 'invalid!', '1234567890abcdef1234567890abcdef', 'deadbeefdeadbeefdeadbeefdeadbeef'];
+const output = mainProcessingLoop(sampleInputs);
+console.log(JSON.stringify(output, null, 2));
