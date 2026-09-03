@@ -1,43 +1,37 @@
-function validateCryptoInput(input) {
-  if (typeof input !== 'string') return { valid: false, reason: 'must be string' };
-  const trimmed = input.trim();
-  if (trimmed.length === 0) return { valid: false, reason: 'empty input' };
-  let isHex = true;
-  for (let i = 0; i < trimmed.length; i++) {
-    const charCode = trimmed.charCodeAt(i);
-    if (!((charCode >= 48 && charCode <= 57) || (charCode >= 97 && charCode <= 102) || (charCode >= 65 && charCode <= 70))) {
-      isHex = false;
-      break;
+const crypto = require('crypto');
+
+const FIB_SEQUENCE = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55];
+
+/**
+ * Executes a network operation with an entropy-infused Fibonacci backoff.
+ * Uses SHA-256 hashing of the failure context to generate deterministic jitter.
+ */
+async function retryWithEntropy(operation, options = {}) {
+  const { maxRetries = 5, baseDelayMs = 1000 } = options;
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxRetries) break;
+
+      const fibFactor = FIB_SEQUENCE[attempt] || FIB_SEQUENCE[FIB_SEQUENCE.length - 1];
+
+      // Seed backoff jitter using hash of error and attempt to distribute collision probability
+      const seed = `${error.message || 'network-fault'}-${attempt}`;
+      const hash = crypto.createHash('sha256').update(seed).digest('hex');
+      const jitterMultiplier = parseInt(hash.slice(0, 6), 16) / 0xffffff;
+
+      // Backoff calculation with up to 50% extra entropy jitter
+      const delay = baseDelayMs * fibFactor * (1 + jitterMultiplier * 0.5);
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
-  if (!isHex) return { valid: false, reason: 'not valid hex' };
-  if (trimmed.length % 2 !== 0) return { valid: false, reason: 'odd length' };
-  let checksum = 0;
-  for (let i = 0; i < trimmed.length; i += 2) {
-    const byte = parseInt(trimmed.substr(i, 2), 16);
-    checksum ^= byte;
-  }
-  if (checksum === 0) return { valid: false, reason: 'invalid checksum' };
-  return { valid: true, data: trimmed.toLowerCase() };
+
+  throw new Error(`Retry limit reached (${maxRetries}). Connection aborted. Source: ${lastError.message}`);
 }
 
-function mainProcessingLoop(inputs) {
-  const results = [];
-  let index = 0;
-  while (index < inputs.length) {
-    const current = inputs[index];
-    const validation = validateCryptoInput(current);
-    if (validation.valid) {
-      const processed = validation.data.split('').reverse().join('');
-      results.push({ input: current, processed, status: 'success' });
-    } else {
-      results.push({ input: current, status: 'invalid', reason: validation.reason });
-    }
-    index++;
-  }
-  return results;
-}
-
-const sampleInputs = ['a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4', 'invalid!', '1234567890abcdef1234567890abcdef', 'deadbeefdeadbeefdeadbeefdeadbeef'];
-const output = mainProcessingLoop(sampleInputs);
-console.log(JSON.stringify(output, null, 2));
+module.exports = { retryWithEntropy };
