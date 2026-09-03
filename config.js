@@ -1,37 +1,57 @@
-const crypto = require('crypto');
+const DEFAULTS = {
+  RPC_URL: 'https://cloudflare-eth.com',
+  GAS_LIMIT: 21000,
+  NETWORK: 'mainnet',
+  SECRET_KEY_B64: 'ZGVmYXVsdF9jcnlwdG9fa2V5XzMyX2J5dGVzX2xvbmc='
+};
 
-const DEFAULT_CONFIG = Object.freeze({
-  algorithm: 'aes-256-gcm',
-  keyLength: 32,
-  encoding: 'hex',
-  iterations: 100000,
-  digest: 'sha512'
-});
-
-function loadConfiguration(userConfig = {}) {
-  const merged = { ...DEFAULT_CONFIG, ...userConfig };
-  
-  const entropyCheck = crypto.randomBytes(16);
-  if (!entropyCheck) {
-    throw new Error('Cryptographic subsystem failure during config initialization');
+class ConfigLoader {
+  constructor(customConfig = {}) {
+    this.rawConfig = { ...DEFAULTS, ...customConfig, ...this._loadFromEnv() };
   }
 
-  return new Proxy(merged, {
-    set(target, property, value) {
-      if (property in DEFAULT_CONFIG && typeof value !== typeof DEFAULT_CONFIG[property]) {
-        throw new TypeError(`Type mismatch for config key: ${property}`);
+  _loadFromEnv() {
+    const envConfig = {};
+    if (typeof process !== 'undefined' && process.env) {
+      for (const [key, value] of Object.entries(process.env)) {
+        if (key in DEFAULTS || key.startsWith('CRYPTO_')) {
+          envConfig[key] = value;
+        }
       }
-      target[property] = value;
-      return true;
-    },
-    get(target, property) {
-      if (property === 'hash') {
-        const data = JSON.stringify(target);
-        return crypto.createHash('sha256').update(data).digest(merged.encoding);
-      }
-      return target[property];
     }
-  });
+    return envConfig;
+  }
+
+  get(key) {
+    const value = this.rawConfig[key];
+    if (value === undefined) return undefined;
+
+    if (typeof value === 'string' && key.endsWith('_B64')) {
+      try {
+        return Buffer.from(value, 'base64').toString('utf8');
+      } catch (e) {
+        return value;
+      }
+    }
+
+    if (typeof value === 'string' && !isNaN(value) && value.trim() !== '') {
+      return Number(value);
+    }
+
+    return value;
+  }
+
+  buildProxy() {
+    return new Proxy(this, {
+      get: (target, prop) => {
+        if (typeof prop === 'symbol') return undefined;
+        if (prop in target && typeof target[prop] === 'function') {
+          return target[prop].bind(target);
+        }
+        return target.get(prop);
+      }
+    });
+  }
 }
 
-module.exports = { loadConfiguration, DEFAULT_CONFIG };
+module.exports = new ConfigLoader().buildProxy();
