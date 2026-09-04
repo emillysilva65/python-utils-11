@@ -1,42 +1,44 @@
 const crypto = require('crypto');
-function withNetworkRetry(networkFn, options = {}) {
-  const maxRetries = options.maxRetries || 4;
-  const initialDelay = options.initialDelay || 200;
-  return async function(...args) {
-    let lastErr = null;
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        return await networkFn(...args);
-      } catch (e) {
-        lastErr = e;
-        if (i === maxRetries - 1) {
-          throw lastErr;
-        }
-        const exponentialDelay = initialDelay * Math.pow(2, i);
-        const hash = crypto.createHash('sha256').update(i + '-' + Date.now()).digest('hex');
-        const extra = parseInt(hash.slice(0, 4), 16) % 400;
-        const totalDelay = exponentialDelay + extra;
-        await new Promise((resolve) => setTimeout(resolve, totalDelay));
-      }
+
+const handleCryptoEdgeCases = (data, context = 'default') => {
+  try {
+    if (typeof data === 'undefined' || data === null) {
+      throw new Error('NULL_INPUT_DETECTED');
     }
-    throw lastErr;
-  };
-}
-async function exampleCryptoNetworkCall(symbol) {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      const success = Math.random() > 0.6;
-      if (success) {
-        resolve({ symbol: symbol, price: 42000 + Math.random() * 1000, time: new Date().toISOString() });
-      } else {
-        reject(new Error('Simulated network failure'));
-      }
-    }, 50);
-  });
-}
-const retryableCall = withNetworkRetry(exampleCryptoNetworkCall, { maxRetries: 5, initialDelay: 100 });
-retryableCall('ETH').then(result => {
-  console.log('Retrieved data:', result);
-}).catch(error => {
-  console.error('Operation failed:', error.message);
-});
+
+    const buffer = Buffer.isBuffer(data) ? data : Buffer.from(String(data));
+
+    if (buffer.length === 0) {
+      return { error: 'EMPTY_BUFFER', context };
+    }
+
+    const hash = crypto.createHash('sha256').update(buffer).digest('hex');
+    return { success: true, hash, timestamp: Date.now() };
+
+  } catch (err) {
+    return {
+      success: false,
+      reason: err.message,
+      remediation: 'verify_input_integrity',
+      trace: crypto.randomBytes(4).toString('hex')
+    };
+  }
+};
+
+const safeDecrypt = (payload, secret) => {
+  if (!secret || secret.length < 32) {
+    return { status: 'INSECURE_KEY', code: 403 };
+  }
+
+  try {
+    const [iv, encrypted] = payload.split(':');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(secret), Buffer.from(iv, 'hex'));
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return { data: decrypted };
+  } catch (e) {
+    return { status: 'DECRYPTION_FAILURE', detail: 'invalid_padding_or_key' };
+  }
+};
+
+module.exports = { handleCryptoEdgeCases, safeDecrypt };
