@@ -1,24 +1,23 @@
 # python-utils-11
 
-`python-utils-11` is a high-performance JavaScript library designed for real-time cryptocurrency wallet generation, address validation, and cryptographic hashing. It bridges the gap between complex blockchain protocols and everyday Node.js applications by providing lightweight, dependency-free cryptographic primitives.
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node Version](https://img.shields.io/badge/node-%3E%3D_16.0.0-blue.svg)](https://nodejs.org)
+A robust suite of JavaScript utilities designed to streamline cryptographic operations and blockchain data parsing. This library simplifies complex hashing, signature verification, and wallet address validation for decentralized applications.
 
 ## Features
 
-- **Multi-Chain Address Generation:** Instantly derive ECDSA keypairs and valid addresses for Bitcoin (BTC), Ethereum (ETH), and Solana (SOL) from a single master seed.
-- **Strict Address Validation:** Utilize optimized regular expressions and checksum algorithms (like EIP-55 for Ethereum) to validate destination addresses before broadcasting transactions.
-- **Gas & Fee Estimation Helper:** Programmatically fetch current network base fees and calculate optimal transaction gas limits based on historical mempool congestion.
-- **Zero Heavy Dependencies:** Built using native Node.js `crypto` modules to ensure a minimal security footprint and fast execution times.
+*   **ECDSA Signature Verification:** Native support for SECP256k1 signature recovery and validation, essential for EVM-based transaction signing.
+*   **Keccak-256 Hashing:** High-performance implementation of Keccak-256, optimized for efficient data indexing and address generation.
+*   **BIP-39 Mnemonic Helper:** Tools to generate, validate, and derive private keys from standard mnemonic phrases.
+*   **Checksum Validator:** Built-in utilities to ensure Ethereum address checksum compliance (EIP-55) before broadcasting transactions.
 
 ## Installation
 
-Install the package locally in your Node.js project using npm or yarn:
+Install the package via npm:
 
 ```bash
 npm install python-utils-11
 ```
+
+Or using yarn:
 
 ```bash
 yarn add python-utils-11
@@ -26,27 +25,21 @@ yarn add python-utils-11
 
 ## Usage
 
-Here is a quick example of how to generate a new cryptographic keypair and validate an Ethereum wallet address:
-
 ```javascript
-const { WalletManager, AddressValidator } = require('python-utils-11');
+const { hashMessage, isValidAddress } = require('python-utils-11');
 
-// Generate a new multi-chain wallet instance
-const wallet = WalletManager.generateRandomWallet();
-console.log('Generated Address (ETH):', wallet.ethereum.address);
-console.log('Private Key:', wallet.ethereum.privateKey);
+// Validate an Ethereum address
+const address = '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
+console.log(isValidAddress(address)); // true
 
-// Validate an address with checksum verification
-const targetAddress = '0x71C...3a9';
-const isValid = AddressValidator.isValidEthereum(targetAddress);
-
-if (isValid) {
-  console.log('Address is valid and checksum-verified.');
-} else {
-  console.log('Invalid address format.');
-}
+// Generate a Keccak-256 hash
+const hash = hashMessage('hello crypto');
+console.log(hash); 
+// 0x...
 ```
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
