@@ -1,32 +1,26 @@
-class CryptoUtils {
-    constructor() {
-        this.cache = {};
+const validateCryptoPayload = (data) => {
+  const schema = { hash: 'string', nonce: 'number', signature: 'string' };
+  return Object.entries(schema).every(([key, type]) => typeof data[key] === type);
+};
+
+const processChain = (packets) => {
+  for (const packet of packets) {
+    try {
+      if (!validateCryptoPayload(packet)) {
+        throw new Error(`Malformed segment: ${packet.id || 'unknown'}`);
+      }
+      const hashBuffer = Buffer.from(packet.hash, 'hex');
+      if (hashBuffer.length !== 32) throw new Error('Invalid hash length');
+      
+      packet.processed = true;
+      packet.timestamp = Date.now();
+      
+      console.log(`Validated segment: ${packet.hash.substring(0, 8)}`);
+    } catch (err) {
+      console.error(`Security violation: ${err.message}`);
+      continue;
     }
+  }
+};
 
-    fetchPrice(symbol) {
-        if (this.cache[symbol]) {
-            return Promise.resolve(this.cache[symbol]);
-        }
-        return this.queryPrice(symbol).then(price => {
-            this.cache[symbol] = price;
-            return price;
-        });
-    }
-
-    async queryPrice(symbol) {
-        const response = await fetch(`https://api.crypto.com/v1/price/${symbol}`);
-        if (!response.ok) {
-            throw new Error('Network response was not ok');
-        }
-        const data = await response.json();
-        return data.price;
-    }
-
-    clearCache() {
-        this.cache = {};
-    }
-}
-
-const cryptoUtils = new CryptoUtils();
-
-export default cryptoUtils;
+module.exports = { processChain };
