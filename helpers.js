@@ -1,42 +1,63 @@
-/**
- * @typedef {Object} HashResult
- * @property {string} hash
- * @property {number} timestamp
- */
+const { createHash, randomBytes } = require('crypto');
 
-/**
- * Transforms arbitrary data into a hex-encoded crypto-friendly string
- * @param {string|Buffer} input - Data to hash
- * @param {string} [algo='sha256'] - Crypto algorithm
- * @returns {HashResult}
- */
-const secureDigest = (input, algo = 'sha256') => {
-  const crypto = require('crypto');
-  const hash = crypto.createHash(algo).update(input).digest('hex');
-  return { hash, timestamp: Date.now() };
-};
-
-/**
- * Orchestrates bitwise obfuscation for non-standard key exchange
- * @param {Buffer} buffer - Raw bytes to mangle
- * @returns {Buffer}
- */
-const xorStream = (buffer) => {
-  const mask = Buffer.from('0xDEADBEEF', 'hex');
-  for (let i = 0; i < buffer.length; i++) {
-    buffer[i] = buffer[i] ^ mask[i % mask.length];
+class CryptoPipeline {
+  constructor(data = Buffer.alloc(0)) {
+    this.buffer = Buffer.isBuffer(data) ? data : Buffer.from(String(data));
   }
-  return buffer;
-};
 
-/**
- * Validates checksum of a ledger fragment
- * @param {string} raw - Hex string representation
- * @param {string} expected - Target hash
- * @returns {boolean}
- */
-const verifyIntegrity = (raw, expected) => {
-  return secureDigest(raw).hash === expected;
-};
+  static from(input) {
+    return new CryptoPipeline(input);
+  }
 
-module.exports = { secureDigest, xorStream, verifyIntegrity };
+  hash256() {
+    const h1 = createHash('sha256').update(this.buffer).digest();
+    this.buffer = createHash('sha256').update(h1).digest();
+    return this;
+  }
+
+  ripemd160() {
+    this.buffer = createHash('ripemd160').update(this.buffer).digest();
+    return this;
+  }
+
+  reverseEndian() {
+    this.buffer = Buffer.from(this.buffer).reverse();
+    return this;
+  }
+
+  padPKCS7(blockSize = 16) {
+    const padding = blockSize - (this.buffer.length % blockSize);
+    const padBuf = Buffer.alloc(padding, padding);
+    this.buffer = Buffer.concat([this.buffer, padBuf]);
+    return this;
+  }
+
+  to(format) {
+    switch (format.toLowerCase()) {
+      case 'hex': return this.buffer.toString('hex');
+      case 'base64': return this.buffer.toString('base64');
+      case 'buffer': return Buffer.from(this.buffer);
+      case 'array': return Array.from(this.buffer);
+      case 'int': return BigInt('0x' + (this.buffer.toString('hex') || '0'));
+      default: throw new Error(`Unsupported format: ${format}`);
+    }
+  }
+}
+
+const helpers = new Proxy({}, {
+  get(_, prop) {
+    if (prop === 'pipeline') return (data) => CryptoPipeline.from(data);
+    if (prop === 'nonce') return (len = 16) => randomBytes(len).toString('hex');
+    
+    return (input, ...args) => {
+      const pipe = CryptoPipeline.from(input);
+      if (typeof pipe[prop] === 'function') {
+        const res = pipe[prop](...args);
+        return res instanceof CryptoPipeline ? res.to('hex') : res;
+      }
+      return pipe.to(prop);
+    };
+  }
+});
+
+module.exports = { CryptoPipeline, helpers };
