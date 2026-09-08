@@ -1,57 +1,29 @@
-const DEFAULTS = {
-  RPC_URL: 'https://cloudflare-eth.com',
-  GAS_LIMIT: 21000,
-  NETWORK: 'mainnet',
-  SECRET_KEY_B64: 'ZGVmYXVsdF9jcnlwdG9fa2V5XzMyX2J5dGVzX2xvbmc='
+const fs = require('fs');
+const path = require('path');
+
+const deepMerge = (target, source) => {
+  for (const key of Object.keys(source)) {
+    if (source[key] instanceof Object && key in target) {
+      Object.assign(source[key], deepMerge(target[key], source[key]));
+    }
+  }
+  return { ...target, ...source };
 };
 
-class ConfigLoader {
-  constructor(customConfig = {}) {
-    this.rawConfig = { ...DEFAULTS, ...customConfig, ...this._loadFromEnv() };
+const defaults = {
+  rpc: 'wss://mainnet.crypto.io',
+  timeout: 5000,
+  retry: { attempts: 3, delay: 1000 },
+  features: { validation: true, logging: false }
+};
+
+const loadConfig = (userPath) => {
+  try {
+    const fileContent = fs.readFileSync(path.resolve(userPath), 'utf8');
+    return deepMerge(defaults, JSON.parse(fileContent));
+  } catch (err) {
+    return defaults;
   }
+};
 
-  _loadFromEnv() {
-    const envConfig = {};
-    if (typeof process !== 'undefined' && process.env) {
-      for (const [key, value] of Object.entries(process.env)) {
-        if (key in DEFAULTS || key.startsWith('CRYPTO_')) {
-          envConfig[key] = value;
-        }
-      }
-    }
-    return envConfig;
-  }
-
-  get(key) {
-    const value = this.rawConfig[key];
-    if (value === undefined) return undefined;
-
-    if (typeof value === 'string' && key.endsWith('_B64')) {
-      try {
-        return Buffer.from(value, 'base64').toString('utf8');
-      } catch (e) {
-        return value;
-      }
-    }
-
-    if (typeof value === 'string' && !isNaN(value) && value.trim() !== '') {
-      return Number(value);
-    }
-
-    return value;
-  }
-
-  buildProxy() {
-    return new Proxy(this, {
-      get: (target, prop) => {
-        if (typeof prop === 'symbol') return undefined;
-        if (prop in target && typeof target[prop] === 'function') {
-          return target[prop].bind(target);
-        }
-        return target.get(prop);
-      }
-    });
-  }
-}
-
-module.exports = new ConfigLoader().buildProxy();
+module.exports = { loadConfig };
