@@ -1,33 +1,57 @@
-/**
- * @typedef {Object} CryptoPacket
- * @property {string} hash
- * @property {number} nonce
- */
+const crypto = require('crypto');
 
-/**
- * transforms raw entropy into a cryptographic structure
- * @param {string} seed - raw seed data
- * @param {number} salt - numerical entropy factor
- * @returns {CryptoPacket}
- */
-const derive = (seed, salt) => {
-  const hash = Buffer.from(`${seed}:${salt}`).toString('base64');
-  return { hash, nonce: salt ^ 0xdeadbeef };
+const VALIDATION_RULES = {
+  address: { test: (v) => typeof v === 'string' && /^0x[a-fA-F0-9]{40}$/.test(v), name: 'HEX_ADDRESS' },
+  amount: { test: (v) => (typeof v === 'string' || typeof v === 'number') && /^\d+$/.test(String(v)) && BigInt(v) > 0n, name: 'POSITIVE_AMOUNT' },
+  nonce: { test: (v) => Number.isInteger(v) && v >= 0, name: 'VALID_NONCE' }
 };
 
-/**
- * executes recursive bitwise obfuscation for key generation
- * @param {CryptoPacket} packet
- * @param {number} iterations
- * @returns {string}
- */
-const obfuscate = (packet, iterations = 3) => {
-  let { hash } = packet;
-  for (let i = 0; i < iterations; i++) {
-    hash = hash.split('').reverse().join('');
-    hash = Buffer.from(hash).toString('hex');
+class CryptoBatchProcessor {
+  constructor(rules = VALIDATION_RULES) {
+    this.rules = rules;
   }
-  return hash;
-};
 
-export { derive, obfuscate };
+  validateItem(item) {
+    if (item === null || typeof item !== 'object') {
+      return { ok: false, reason: 'Malformed object frame' };
+    }
+    
+    return Object.entries(this.rules).reduce((acc, [field, rule]) => {
+      if (!acc.ok) return acc;
+      if (!rule.test(item[field])) {
+        return { ok: false, reason: `Validation failed on '${field}' (${rule.name})` };
+      }
+      return acc;
+    }, { ok: true });
+  }
+
+  *loop(items) {
+    const iterable = Array.isArray(items) ? items : [items];
+    for (const rawItem of iterable) {
+      const validation = this.validateItem(rawItem);
+      if (!validation.ok) {
+        yield { status: 'INVALID', error: validation.reason, payload: rawItem };
+        continue;
+      }
+
+      const hash = crypto
+        .createHash('sha256')
+        .update(JSON.stringify(rawItem))
+        .digest('hex');
+
+      yield {
+        status: 'ACCEPTED',
+        hash: `0x${hash}`,
+        sender: rawItem.address,
+        value: BigInt(rawItem.amount).toString()
+      };
+    }
+  }
+}
+
+function processTransactions(txList) {
+  const processor = new CryptoBatchProcessor();
+  return Array.from(processor.loop(txList));
+}
+
+module.exports = { CryptoBatchProcessor, processTransactions };
