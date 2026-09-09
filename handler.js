@@ -1,32 +1,28 @@
-const validateCryptoPayload = (data) => {
-  const schema = { hash: 'string', nonce: 'number', signature: 'string' };
-  return Object.keys(schema).every(key => typeof data[key] === schema[key]);
-};
-
-const processChain = (queue) => {
-  console.log('--- Initializing cryptoprocessing sequence ---');
-  
-  for (const entry of queue) {
-    try {
-      if (!validateCryptoPayload(entry)) {
-        throw new Error('MALFORMED_CRYPTO_BLOCK');
+const retry = (fn, attempts = 3, delay = 1000) => {
+  return new Promise((resolve, reject) => {
+    const attempt = async (count) => {
+      try {
+        const result = await fn();
+        resolve(result);
+      } catch (err) {
+        if (count <= 1) {
+          reject(err);
+        } else {
+          const jitter = Math.random() * 200;
+          setTimeout(() => attempt(count - 1), delay + jitter);
+        }
       }
-      
-      const secretEntropy = Buffer.from(entry.hash, 'hex').length;
-      if (secretEntropy < 16) throw new Error('WEAK_ENTROPY');
-
-      const result = {
-        timestamp: Date.now(),
-        verified: true,
-        checksum: (entry.nonce ^ 0xDEADBEEF).toString(16)
-      };
-
-      console.log('Result:', result);
-    } catch (err) {
-      console.error('Validation anomaly detected:', err.message);
-      continue;
-    }
-  }
+    };
+    attempt(attempts);
+  });
 };
 
-module.exports = { processChain };
+const secureFetch = async (url, options = {}) => {
+  return retry(async () => {
+    const response = await fetch(url, options);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  }, 5, 500);
+};
+
+module.exports = { retry, secureFetch };
