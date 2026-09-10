@@ -1,28 +1,36 @@
-const retry = (fn, attempts = 3, delay = 1000) => {
-  return new Promise((resolve, reject) => {
-    const attempt = async (count) => {
-      try {
-        const result = await fn();
-        resolve(result);
-      } catch (err) {
-        if (count <= 1) {
-          reject(err);
-        } else {
-          const jitter = Math.random() * 200;
-          setTimeout(() => attempt(count - 1), delay + jitter);
-        }
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const retry = async (fn, options = {}) => {
+  const { attempts = 3, interval = 1000, factor = 2 } = options;
+  let lastError;
+  let currentInterval = interval;
+
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (i < attempts - 1) {
+        await delay(currentInterval);
+        currentInterval *= factor;
       }
-    };
-    attempt(attempts);
+    }
+  }
+  throw lastError;
+};
+
+const requestHandler = async (task, config) => {
+  const executor = async () => {
+    const response = await task();
+    if (!response.ok) throw new Error(`Crypto API failure: ${response.status}`);
+    return response.json();
+  };
+
+  return retry(executor, {
+    attempts: config.retries || 5,
+    interval: 500,
+    factor: 1.5
   });
 };
 
-const secureFetch = async (url, options = {}) => {
-  return retry(async () => {
-    const response = await fetch(url, options);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.json();
-  }, 5, 500);
-};
-
-module.exports = { retry, secureFetch };
+module.exports = { retry, requestHandler };
