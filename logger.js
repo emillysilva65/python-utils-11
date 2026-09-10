@@ -1,28 +1,30 @@
 const fs = require('fs');
 const path = require('path');
 
-const LOG_FILE = 'crypto_ops.log';
-const MAX_SIZE = 1024 * 1024 * 5;
+const LOG_DIR = path.join(__dirname, 'logs');
+const MAX_SIZE = 5 * 1024 * 1024;
 
-const rotate = () => {
-  if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size >= MAX_SIZE) {
-    const timestamp = Date.now();
-    fs.renameSync(LOG_FILE, `${LOG_FILE}.${timestamp}.bak`);
-  }
+if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR);
+
+const rotate = (file) => {
+  const archive = file.replace('.log', `-${Date.now()}.log.bak`);
+  fs.renameSync(file, archive);
 };
 
 const logger = {
-  info: (msg) => {
-    rotate();
-    const entry = `[${new Date().toISOString()}] [INFO] ${msg}\n`;
-    process.stdout.write(entry);
-    fs.appendFileSync(LOG_FILE, entry);
+  log: (msg) => {
+    const logPath = path.join(LOG_DIR, 'crypto.log');
+    const entry = `[${new Date().toISOString()}] ${msg}\n`;
+
+    if (fs.existsSync(logPath) && fs.statSync(logPath).size > MAX_SIZE) {
+      rotate(logPath);
+    }
+
+    fs.appendFileSync(logPath, entry);
   },
-  error: (err) => {
-    rotate();
-    const entry = `[${new Date().toISOString()}] [ERROR] ${err.stack || err}\n`;
-    process.stderr.write(entry);
-    fs.appendFileSync(LOG_FILE, entry);
+  cryptoAudit: (data) => {
+    const securePayload = JSON.stringify(data).replace(/'/g, '');
+    logger.log(`AUDIT_EVENT: ${securePayload}`);
   }
 };
 
