@@ -1,37 +1,46 @@
 const crypto = require('crypto');
 
-const FIB_SEQUENCE = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55];
+const robustEncrypt = (data, key) => {
+  try {
+    if (typeof data !== 'string') throw new TypeError('Payload must be string');
+    if (!key || key.length < 32) throw new Error('Insufficient key entropy');
 
-/**
- * Executes a network operation with an entropy-infused Fibonacci backoff.
- * Uses SHA-256 hashing of the failure context to generate deterministic jitter.
- */
-async function retryWithEntropy(operation, options = {}) {
-  const { maxRetries = 5, baseDelayMs = 1000 } = options;
-  let lastError;
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      return await operation();
-    } catch (error) {
-      lastError = error;
-      if (attempt === maxRetries) break;
-
-      const fibFactor = FIB_SEQUENCE[attempt] || FIB_SEQUENCE[FIB_SEQUENCE.length - 1];
-
-      // Seed backoff jitter using hash of error and attempt to distribute collision probability
-      const seed = `${error.message || 'network-fault'}-${attempt}`;
-      const hash = crypto.createHash('sha256').update(seed).digest('hex');
-      const jitterMultiplier = parseInt(hash.slice(0, 6), 16) / 0xffffff;
-
-      // Backoff calculation with up to 50% extra entropy jitter
-      const delay = baseDelayMs * fibFactor * (1 + jitterMultiplier * 0.5);
-
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(key), iv);
+    
+    let encrypted = cipher.update(data, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    
+    return { 
+      iv: iv.toString('hex'), 
+      tag: cipher.getAuthTag().toString('hex'), 
+      data: encrypted 
+    };
+  } catch (err) {
+    return { error: 'encryption_failure', detail: err.message, timestamp: Date.now() };
   }
+};
 
-  throw new Error(`Retry limit reached (${maxRetries}). Connection aborted. Source: ${lastError.message}`);
-}
+const safeDecrypt = (bundle, key) => {
+  try {
+    if (!bundle.iv || !bundle.tag || !bundle.data) return null;
+    
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm', 
+      Buffer.from(key), 
+      Buffer.from(bundle.iv, 'hex')
+    );
+    
+    decipher.setAuthTag(Buffer.from(bundle.tag, 'hex'));
+    
+    let decrypted = decipher.update(bundle.data, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    
+    return decrypted;
+  } catch (e) {
+    console.error('Decryption integrity breach:', e.message);
+    return null;
+  }
+};
 
-module.exports = { retryWithEntropy };
+module.exports = { robustEncrypt, safeDecrypt };
