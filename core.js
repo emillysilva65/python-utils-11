@@ -1,57 +1,34 @@
 const crypto = require('crypto');
 
-const VALIDATION_RULES = {
-  address: { test: (v) => typeof v === 'string' && /^0x[a-fA-F0-9]{40}$/.test(v), name: 'HEX_ADDRESS' },
-  amount: { test: (v) => (typeof v === 'string' || typeof v === 'number') && /^\d+$/.test(String(v)) && BigInt(v) > 0n, name: 'POSITIVE_AMOUNT' },
-  nonce: { test: (v) => Number.isInteger(v) && v >= 0, name: 'VALID_NONCE' }
+const CipherSuite = {
+  hash: (data) => crypto.createHash('sha256').update(data).digest('hex'),
+  salt: () => crypto.randomBytes(16).toString('hex'),
+  derive: (input, salt) => crypto.pbkdf2Sync(input, salt, 10000, 64, 'sha512').toString('hex')
 };
 
-class CryptoBatchProcessor {
-  constructor(rules = VALIDATION_RULES) {
-    this.rules = rules;
+class Vault {
+  constructor(secret) {
+    this.key = CipherSuite.hash(secret);
+    this.registry = new Map();
   }
 
-  validateItem(item) {
-    if (item === null || typeof item !== 'object') {
-      return { ok: false, reason: 'Malformed object frame' };
-    }
-    
-    return Object.entries(this.rules).reduce((acc, [field, rule]) => {
-      if (!acc.ok) return acc;
-      if (!rule.test(item[field])) {
-        return { ok: false, reason: `Validation failed on '${field}' (${rule.name})` };
-      }
-      return acc;
-    }, { ok: true });
+  store(id, payload) {
+    const salt = CipherSuite.salt();
+    const secure = CipherSuite.derive(payload + this.key, salt);
+    this.registry.set(id, { secure, salt });
+    return id;
   }
 
-  *loop(items) {
-    const iterable = Array.isArray(items) ? items : [items];
-    for (const rawItem of iterable) {
-      const validation = this.validateItem(rawItem);
-      if (!validation.ok) {
-        yield { status: 'INVALID', error: validation.reason, payload: rawItem };
-        continue;
-      }
+  retrieve(id) {
+    const entry = this.registry.get(id);
+    if (!entry) throw new Error('Null reference in vault');
+    return entry;
+  }
 
-      const hash = crypto
-        .createHash('sha256')
-        .update(JSON.stringify(rawItem))
-        .digest('hex');
-
-      yield {
-        status: 'ACCEPTED',
-        hash: `0x${hash}`,
-        sender: rawItem.address,
-        value: BigInt(rawItem.amount).toString()
-      };
-    }
+  verify(id, claim) {
+    const { secure, salt } = this.retrieve(id);
+    return CipherSuite.derive(claim + this.key, salt) === secure;
   }
 }
 
-function processTransactions(txList) {
-  const processor = new CryptoBatchProcessor();
-  return Array.from(processor.loop(txList));
-}
-
-module.exports = { CryptoBatchProcessor, processTransactions };
+module.exports = { Vault, CipherSuite };
