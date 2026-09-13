@@ -1,63 +1,43 @@
-const { createHash, randomBytes } = require('crypto');
+const crypto = require('crypto');
 
-class CryptoPipeline {
-  constructor(data = Buffer.alloc(0)) {
-    this.buffer = Buffer.isBuffer(data) ? data : Buffer.from(String(data));
+const hexToBuffer = (hex) => Buffer.from(hex, 'hex');
+const bufferToHex = (buf) => buf.toString('hex');
+
+const xorBuffers = (a, b) => {
+  const length = Math.min(a.length, b.length);
+  const result = Buffer.alloc(length);
+  for (let i = 0; i < length; i++) {
+    result[i] = a[i] ^ b[i];
   }
+  return result;
+};
 
-  static from(input) {
-    return new CryptoPipeline(input);
-  }
+const generateIv = () => crypto.randomBytes(16);
 
-  hash256() {
-    const h1 = createHash('sha256').update(this.buffer).digest();
-    this.buffer = createHash('sha256').update(h1).digest();
-    return this;
-  }
+const encryptAesGcm = (key, data, iv) => {
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  return Buffer.concat([cipher.update(data, 'utf8'), cipher.final(), cipher.getAuthTag()]);
+};
 
-  ripemd160() {
-    this.buffer = createHash('ripemd160').update(this.buffer).digest();
-    return this;
-  }
+const decryptAesGcm = (key, encrypted, iv) => {
+  const authTag = encrypted.slice(-16);
+  const data = encrypted.slice(0, -16);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(authTag);
+  return Buffer.concat([decipher.update(data), decipher.final()]);
+};
 
-  reverseEndian() {
-    this.buffer = Buffer.from(this.buffer).reverse();
-    return this;
-  }
+const sha256 = (input) => crypto.createHash('sha256').update(input).digest('hex');
 
-  padPKCS7(blockSize = 16) {
-    const padding = blockSize - (this.buffer.length % blockSize);
-    const padBuf = Buffer.alloc(padding, padding);
-    this.buffer = Buffer.concat([this.buffer, padBuf]);
-    return this;
-  }
+const deriveKey = (secret, salt) => crypto.pbkdf2Sync(secret, salt, 100000, 32, 'sha256');
 
-  to(format) {
-    switch (format.toLowerCase()) {
-      case 'hex': return this.buffer.toString('hex');
-      case 'base64': return this.buffer.toString('base64');
-      case 'buffer': return Buffer.from(this.buffer);
-      case 'array': return Array.from(this.buffer);
-      case 'int': return BigInt('0x' + (this.buffer.toString('hex') || '0'));
-      default: throw new Error(`Unsupported format: ${format}`);
-    }
-  }
-}
-
-const helpers = new Proxy({}, {
-  get(_, prop) {
-    if (prop === 'pipeline') return (data) => CryptoPipeline.from(data);
-    if (prop === 'nonce') return (len = 16) => randomBytes(len).toString('hex');
-    
-    return (input, ...args) => {
-      const pipe = CryptoPipeline.from(input);
-      if (typeof pipe[prop] === 'function') {
-        const res = pipe[prop](...args);
-        return res instanceof CryptoPipeline ? res.to('hex') : res;
-      }
-      return pipe.to(prop);
-    };
-  }
-});
-
-module.exports = { CryptoPipeline, helpers };
+module.exports = {
+  hexToBuffer,
+  bufferToHex,
+  xorBuffers,
+  generateIv,
+  encryptAesGcm,
+  decryptAesGcm,
+  sha256,
+  deriveKey
+};
