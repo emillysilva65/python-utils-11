@@ -1,36 +1,34 @@
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const crypto = require('crypto');
 
-const retry = async (fn, options = {}) => {
-  const { attempts = 3, interval = 1000, factor = 2 } = options;
-  let lastError;
-  let currentInterval = interval;
-
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastError = err;
-      if (i < attempts - 1) {
-        await delay(currentInterval);
-        currentInterval *= factor;
-      }
-    }
-  }
-  throw lastError;
+const hashData = (data, algo = 'sha256') => {
+  return crypto.createHash(algo).update(JSON.stringify(data)).digest('hex');
 };
 
-const requestHandler = async (task, config) => {
-  const executor = async () => {
-    const response = await task();
-    if (!response.ok) throw new Error(`Crypto API failure: ${response.status}`);
-    return response.json();
-  };
-
-  return retry(executor, {
-    attempts: config.retries || 5,
-    interval: 500,
-    factor: 1.5
-  });
+const generateNonce = (len = 16) => {
+  return crypto.randomBytes(len).toString('hex');
 };
 
-module.exports = { retry, requestHandler };
+const signPayload = (payload, secret) => {
+  const hmac = crypto.createHmac('sha512', secret);
+  hmac.update(JSON.stringify(payload));
+  return hmac.digest('base64');
+};
+
+const secureCompare = (a, b) => {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+};
+
+const deriveKey = (secret, salt, iterations = 10000) => {
+  return crypto.pbkdf2Sync(secret, salt, iterations, 64, 'sha512');
+};
+
+module.exports = {
+  hashData,
+  generateNonce,
+  signPayload,
+  secureCompare,
+  deriveKey
+};
