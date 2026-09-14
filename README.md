@@ -1,13 +1,13 @@
 # python-utils-11
 
-A robust suite of JavaScript utilities designed to streamline cryptographic operations and blockchain data parsing. This library simplifies complex hashing, signature verification, and wallet address validation for decentralized applications.
+A robust toolkit designed to streamline crypto-asset management and blockchain data interactions. This library provides high-performance utilities for address validation, unit conversions, and secure transaction signing in JavaScript environments.
 
 ## Features
 
-*   **ECDSA Signature Verification:** Native support for SECP256k1 signature recovery and validation, essential for EVM-based transaction signing.
-*   **Keccak-256 Hashing:** High-performance implementation of Keccak-256, optimized for efficient data indexing and address generation.
-*   **BIP-39 Mnemonic Helper:** Tools to generate, validate, and derive private keys from standard mnemonic phrases.
-*   **Checksum Validator:** Built-in utilities to ensure Ethereum address checksum compliance (EIP-55) before broadcasting transactions.
+*   **Address Validator:** High-speed checksum verification and format validation for Ethereum (EIP-55) and Bitcoin (Bech32) addresses.
+*   **Precision Unit Converter:** Native BigInt support for safe conversions between Wei, Gwei, and Ether to prevent floating-point calculation errors.
+*   **Transaction Signer:** Lightweight utility for generating deterministic ECDSA signatures and managing cryptographic key pairs.
+*   **Rate-Limited API Wrapper:** Built-in concurrency control for querying major exchange pricing endpoints without triggering rate-limit bans.
 
 ## Installation
 
@@ -17,29 +17,29 @@ Install the package via npm:
 npm install python-utils-11
 ```
 
-Or using yarn:
+Or via yarn:
 
 ```bash
 yarn add python-utils-11
 ```
 
-## Usage
+## Basic Usage
 
 ```javascript
-const { hashMessage, isValidAddress } = require('python-utils-11');
+const { CryptoUtils, UnitConverter } = require('python-utils-11');
 
 // Validate an Ethereum address
-const address = '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
-console.log(isValidAddress(address)); // true
+const isValid = CryptoUtils.isValidAddress('0x71C7656EC7ab88b098defB751B7401B5f6d8976F');
 
-// Generate a Keccak-256 hash
-const hash = hashMessage('hello crypto');
-console.log(hash); 
-// 0x...
+// Convert 1.5 ETH to Wei
+const weiAmount = UnitConverter.toWei('1.5', 'ether');
+
+console.log(`Address Valid: ${isValid}`);
+console.log(`Amount in Wei: ${weiAmount.toString()}`);
 ```
 
 ## License
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Distributed under the MIT License. See `LICENSE` for more information.
