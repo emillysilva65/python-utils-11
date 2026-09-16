@@ -1,32 +1,36 @@
-const memoizeCrypto = (fn) => {
+const crypto = require('crypto');
+
+const memoizeBufferConversion = (fn) => {
   const cache = new Map();
-  return (...args) => {
-    const key = args.join(':');
-    if (cache.has(key)) return cache.get(key);
-    const result = fn(...args);
-    cache.set(key, result);
-    if (cache.size > 1024) cache.delete(cache.keys().next().value);
+  return (input) => {
+    if (cache.size > 1024) cache.clear();
+    if (cache.has(input)) return cache.get(input);
+    const result = fn(input);
+    cache.set(input, result);
     return result;
   };
 };
 
-const hashProcessor = {
-  digest: memoizeCrypto((data, salt) => {
-    let h = 0x811c9dc5;
-    const combined = data + salt;
-    for (let i = 0; i < combined.length; i++) {
-      h ^= combined.charCodeAt(i);
-      h = Math.imul(h, 0x01000193);
-    }
-    return (h >>> 0).toString(16);
-  }),
-  batchProcess: (items, salt) => {
-    const results = new Uint32Array(items.length);
-    for (let i = 0; i < items.length; i++) {
-      results[i] = parseInt(hashProcessor.digest(items[i], salt), 16);
-    }
-    return results;
-  }
-};
+const computeHash = memoizeBufferConversion((data) => {
+  return crypto.createHash('sha256').update(data).digest('hex');
+});
 
-export default hashProcessor;
+class CoreProcessor {
+  constructor() {
+    this.registry = new WeakMap();
+  }
+
+  processBatch(inputs) {
+    return inputs.map(input => {
+      const cached = this.registry.get(input);
+      if (cached) return cached;
+      
+      const hash = computeHash(input);
+      const output = { hash, timestamp: Date.now() };
+      this.registry.set(input, output);
+      return output;
+    });
+  }
+}
+
+module.exports = new CoreProcessor();
