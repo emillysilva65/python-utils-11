@@ -1,36 +1,42 @@
 const crypto = require('crypto');
 
-const memoizeBufferConversion = (fn) => {
+const memoizeCrypto = (fn) => {
   const cache = new Map();
-  return (input) => {
-    if (cache.size > 1024) cache.clear();
-    if (cache.has(input)) return cache.get(input);
-    const result = fn(input);
-    cache.set(input, result);
+  return (...args) => {
+    const key = JSON.stringify(args);
+    if (cache.has(key)) return cache.get(key);
+    const result = fn(...args);
+    cache.set(key, result);
+    if (cache.size > 1000) cache.delete(cache.keys().next().value);
     return result;
   };
 };
 
-const computeHash = memoizeBufferConversion((data) => {
+const fastHash = memoizeCrypto((data) => {
   return crypto.createHash('sha256').update(data).digest('hex');
 });
 
-class CoreProcessor {
-  constructor() {
-    this.registry = new WeakMap();
+class CryptoEngine {
+  constructor(secret) {
+    this.secret = secret;
+    this.buffer = new Uint8Array(1024);
   }
 
-  processBatch(inputs) {
-    return inputs.map(input => {
-      const cached = this.registry.get(input);
-      if (cached) return cached;
-      
-      const hash = computeHash(input);
-      const output = { hash, timestamp: Date.now() };
-      this.registry.set(input, output);
-      return output;
-    });
+  process(payload) {
+    const startTime = process.hrtime.bigint();
+    const hashed = fastHash(payload + this.secret);
+    const duration = Number(process.hrtime.bigint() - startTime);
+    
+    return {
+      hash: hashed,
+      latencyNs: duration,
+      timestamp: Date.now()
+    };
+  }
+
+  clearMemory() {
+    this.buffer.fill(0);
   }
 }
 
-module.exports = new CoreProcessor();
+module.exports = { CryptoEngine };
