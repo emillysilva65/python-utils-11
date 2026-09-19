@@ -1,38 +1,38 @@
-const fs = require('fs');
-const path = require('path');
+/**
+ * @typedef {Object} CryptoConfig
+ * @property {string} cipher - The hashing algorithm identifier
+ * @property {number} rounds - Iteration count for derivation
+ * @property {boolean} salt - Enable cryptographic salt usage
+ */
 
-const deepMerge = (target, source) => {
-  for (const key of Object.keys(source)) {
-    if (source[key] instanceof Object && key in target) {
-      Object.assign(source[key], deepMerge(target[key], source[key]));
-    }
-  }
-  return { ...target, ...source };
+/**
+ * @type {CryptoConfig}
+ */
+const config = {
+  cipher: 'sha256',
+  rounds: 10000,
+  salt: true
 };
 
-const loadCryptoConfig = (overrides = {}) => {
-  const defaults = {
-    network: 'mainnet',
-    encryption: 'aes-256-gcm',
-    timeout: 5000,
-    keys: {
-      path: './keys',
-      rotate: true
-    }
-  };
+/**
+ * Retrieves a specific configuration parameter with fallback
+ * @param {keyof CryptoConfig} key - Configuration key to retrieve
+ * @returns {string|number|boolean} The requested configuration value
+ */
+function getConfig(key) {
+  const value = config[key];
+  return value !== undefined ? value : null;
+}
 
-  const configFile = path.resolve(process.cwd(), 'crypto.json');
-  let userConfig = {};
+/**
+ * Updates internal crypto configuration state
+ * @param {Partial<CryptoConfig>} settings - Partial object to overwrite
+ * @returns {void}
+ */
+function updateConfig(settings) {
+  Object.keys(settings).forEach(k => {
+    if (k in config) config[k] = settings[k];
+  });
+}
 
-  try {
-    if (fs.existsSync(configFile)) {
-      userConfig = JSON.parse(fs.readFileSync(configFile, 'utf8'));
-    }
-  } catch (e) {
-    console.error('Config parsing failure, using defaults');
-  }
-
-  return deepMerge(defaults, deepMerge(userConfig, overrides));
-};
-
-module.exports = { loadCryptoConfig };
+export { config, getConfig, updateConfig };
