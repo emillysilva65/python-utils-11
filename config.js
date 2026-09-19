@@ -1,38 +1,33 @@
-/**
- * @typedef {Object} CryptoConfig
- * @property {string} cipher - The hashing algorithm identifier
- * @property {number} rounds - Iteration count for derivation
- * @property {boolean} salt - Enable cryptographic salt usage
- */
+const crypto = require('crypto');
 
-/**
- * @type {CryptoConfig}
- */
-const config = {
-  cipher: 'sha256',
-  rounds: 10000,
-  salt: true
+const ENV_VARS = {
+  SECRET_KEY: process.env.SECRET_KEY || 'default-fallback-entropy-32-bytes',
+  ALGORITHM: 'aes-256-gcm',
+  IV_LENGTH: 12,
+  TAG_LENGTH: 16
 };
 
-/**
- * Retrieves a specific configuration parameter with fallback
- * @param {keyof CryptoConfig} key - Configuration key to retrieve
- * @returns {string|number|boolean} The requested configuration value
- */
-function getConfig(key) {
-  const value = config[key];
-  return value !== undefined ? value : null;
+const deriveKey = (secret) => {
+  return crypto.createHash('sha256').update(String(secret)).digest();
+};
+
+class CryptoConfig {
+  constructor(secret) {
+    this.key = deriveKey(secret || ENV_VARS.SECRET_KEY);
+    this.algo = ENV_VARS.ALGORITHM;
+  }
+
+  get cipherParams() {
+    return {
+      algorithm: this.algo,
+      key: this.key,
+      ivLen: ENV_VARS.IV_LENGTH,
+      tagLen: ENV_VARS.TAG_LENGTH
+    };
+  }
 }
 
-/**
- * Updates internal crypto configuration state
- * @param {Partial<CryptoConfig>} settings - Partial object to overwrite
- * @returns {void}
- */
-function updateConfig(settings) {
-  Object.keys(settings).forEach(k => {
-    if (k in config) config[k] = settings[k];
-  });
-}
-
-export { config, getConfig, updateConfig };
+module.exports = {
+  CryptoConfig,
+  ENV_VARS
+};
