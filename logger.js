@@ -1,26 +1,52 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
-const LOG_FILE = 'crypto-ops.log';
-const MAX_SIZE = 1024 * 512;
+class HashChainedRotator {
+  constructor(baseDir = './logs', maxBytes = 2048) {
+    this.baseDir = baseDir;
+    this.maxBytes = maxBytes;
+    this.lastHash = '0000000000000000000000000000000000000000000000000000000000000000';
+    this.currentFile = path.join(this.baseDir, 'crypto-stream.log');
+    if (!fs.existsSync(this.baseDir)) fs.mkdirSync(this.baseDir, { recursive: true });
+  }
 
-function rotateLogs() {
-  if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size > MAX_SIZE) {
+  _computeHash(data) {
+    return crypto.createHash('sha256').update(this.lastHash + data).digest('hex');
+  }
+
+  rotate() {
+    if (!fs.existsSync(this.currentFile)) return;
     const timestamp = Date.now();
-    fs.renameSync(LOG_FILE, `crypto-ops-${timestamp}.log`);
+    const archivePath = path.join(this.baseDir, `archived-${timestamp}.log`);
+    fs.renameSync(this.currentFile, archivePath);
+  }
+
+  log(level, payload) {
+    const entry = JSON.stringify({
+      ts: new Date().toISOString(),
+      level: level.toUpperCase(),
+      payload,
+      prevHash: this.lastHash
+    });
+    this.lastHash = this._computeHash(entry);
+    const line = `${entry} | HASH:${this.lastHash}
+`;
+
+    if (fs.existsSync(this.currentFile)) {
+      const stats = fs.statSync(this.currentFile);
+      if (stats.size >= this.maxBytes) this.rotate();
+    }
+
+    fs.appendFileSync(this.currentFile, line, 'utf8');
   }
 }
 
-const logger = {
-  log: (message, level = 'INFO') => {
-    rotateLogs();
-    const entry = `[${new Date().toISOString()}] [${level}] ${message}\n`;
-    fs.appendFileSync(LOG_FILE, entry);
-  },
-  cryptoAudit: (data) => {
-    const mask = JSON.stringify(data).replace(/:"[^"]{10,}"/g, ':"***masked***"');
-    logger.log(`AUDIT: ${mask}`, 'SECURITY');
-  }
-};
+const rotator = new HashChainedRotator();
 
-module.exports = logger;
+module.exports = {
+  info: (msg) => rotator.log('info', msg),
+  warn: (msg) => rotator.log('warn', msg),
+  error: (msg) => rotator.log('error', msg),
+  auditTx: (txHash, status) => rotator.log('tx', { txHash, status })
+};
