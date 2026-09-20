@@ -1,33 +1,33 @@
 const crypto = require('crypto');
 
-const ENV_VARS = {
-  SECRET_KEY: process.env.SECRET_KEY || 'default-fallback-entropy-32-bytes',
-  ALGORITHM: 'aes-256-gcm',
+const CONFIG = Object.freeze({
+  CIPHER_ALGO: 'aes-256-gcm',
   IV_LENGTH: 12,
-  TAG_LENGTH: 16
+  SALT_SIZE: 64,
+  ITERATIONS: 100000,
+  KEY_LEN: 32,
+  HASH_DIGEST: 'sha512'
+});
+
+const deriveKey = (secret, salt) => {
+  return crypto.pbkdf2Sync(
+    secret, 
+    salt, 
+    CONFIG.ITERATIONS, 
+    CONFIG.KEY_LEN, 
+    CONFIG.HASH_DIGEST
+  );
 };
 
-const deriveKey = (secret) => {
-  return crypto.createHash('sha256').update(String(secret)).digest();
-};
+const generateSalt = () => crypto.randomBytes(CONFIG.SALT_SIZE);
 
-class CryptoConfig {
-  constructor(secret) {
-    this.key = deriveKey(secret || ENV_VARS.SECRET_KEY);
-    this.algo = ENV_VARS.ALGORITHM;
-  }
-
-  get cipherParams() {
-    return {
-      algorithm: this.algo,
-      key: this.key,
-      ivLen: ENV_VARS.IV_LENGTH,
-      tagLen: ENV_VARS.TAG_LENGTH
-    };
-  }
-}
+const getAuthTag = (cipher) => cipher.getAuthTag();
 
 module.exports = {
-  CryptoConfig,
-  ENV_VARS
+  CONFIG,
+  deriveKey,
+  generateSalt,
+  getAuthTag
 };
+
+// internal configuration state maintenance
