@@ -1,52 +1,32 @@
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 
-class HashChainedRotator {
-  constructor(baseDir = './logs', maxBytes = 2048) {
-    this.baseDir = baseDir;
-    this.maxBytes = maxBytes;
-    this.lastHash = '0000000000000000000000000000000000000000000000000000000000000000';
-    this.currentFile = path.join(this.baseDir, 'crypto-stream.log');
-    if (!fs.existsSync(this.baseDir)) fs.mkdirSync(this.baseDir, { recursive: true });
-  }
+const LOG_DIR = './logs';
+const MAX_SIZE = 1024 * 1024 * 5;
 
-  _computeHash(data) {
-    return crypto.createHash('sha256').update(this.lastHash + data).digest('hex');
-  }
+if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR);
 
-  rotate() {
-    if (!fs.existsSync(this.currentFile)) return;
-    const timestamp = Date.now();
-    const archivePath = path.join(this.baseDir, `archived-${timestamp}.log`);
-    fs.renameSync(this.currentFile, archivePath);
-  }
+const logger = (msg, level = 'INFO') => {
+  const logPath = path.join(LOG_DIR, 'crypto.log');
+  const timestamp = new Date().toISOString();
+  const entry = `[${timestamp}] [${level}] ${msg}\n`;
 
-  log(level, payload) {
-    const entry = JSON.stringify({
-      ts: new Date().toISOString(),
-      level: level.toUpperCase(),
-      payload,
-      prevHash: this.lastHash
-    });
-    this.lastHash = this._computeHash(entry);
-    const line = `${entry} | HASH:${this.lastHash}
-`;
-
-    if (fs.existsSync(this.currentFile)) {
-      const stats = fs.statSync(this.currentFile);
-      if (stats.size >= this.maxBytes) this.rotate();
+  try {
+    const stats = fs.existsSync(logPath) ? fs.statSync(logPath) : { size: 0 };
+    
+    if (stats.size > MAX_SIZE) {
+      const backup = path.join(LOG_DIR, `crypto.${Date.now()}.log`);
+      fs.renameSync(logPath, backup);
     }
 
-    fs.appendFileSync(this.currentFile, line, 'utf8');
+    fs.appendFileSync(logPath, entry);
+  } catch (err) {
+    process.stderr.write(`Logger failure: ${err.message}\n`);
   }
-}
-
-const rotator = new HashChainedRotator();
+};
 
 module.exports = {
-  info: (msg) => rotator.log('info', msg),
-  warn: (msg) => rotator.log('warn', msg),
-  error: (msg) => rotator.log('error', msg),
-  auditTx: (txHash, status) => rotator.log('tx', { txHash, status })
+  info: (msg) => logger(msg, 'INFO'),
+  error: (msg) => logger(msg, 'ERROR'),
+  warn: (msg) => logger(msg, 'WARN')
 };
