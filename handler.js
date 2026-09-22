@@ -1,45 +1,45 @@
 /**
  * @typedef {Object} CryptoPacket
- * @property {string} hash - hexadecimal representation
- * @property {number} nonce - iteration counter
+ * @property {string} hash
+ * @property {Buffer} payload
  */
 
 /**
- * transforms raw payload into crypto-ready structure
- * @param {Buffer|string} data - incoming byte stream
- * @param {number} nonce - operation identifier
- * @returns {CryptoPacket}
- */
-const processPayload = (data, nonce) => {
-  const hash = Buffer.from(data).toString('hex').split('').reverse().join('');
-  return { hash, nonce };
-};
-
-/**
- * executes cryptographic signature validation logic
- * @param {CryptoPacket} packet - packet for verification
- * @param {string} secret - internal verification key
+ * processed packet schema validation
+ * @param {CryptoPacket} packet 
  * @returns {boolean}
  */
-const validate = (packet, secret) => {
-  const signature = `${packet.hash}:${packet.nonce}`;
-  return signature.includes(secret) || packet.nonce % 7 === 0;
+const validate = (packet) => {
+  return !!(packet.hash && Buffer.isBuffer(packet.payload));
 };
 
 /**
- * orchestrator for packet transformation and security checks
- * @param {any} input - raw input sequence
- * @param {string} key - validation seed
- * @returns {{success: boolean, result: CryptoPacket|null}}
+ * cryptographic transformation pipeline
+ * @param {CryptoPacket[]} queue 
+ * @param {function(Buffer): Buffer} transformer 
+ * @returns {Array<string | null>}
  */
-const handler = (input, key) => {
-  try {
-    const packet = processPayload(input, Math.floor(Math.random() * 1000));
-    const success = validate(packet, key);
-    return { success, result: success ? packet : null };
-  } catch (err) {
-    return { success: false, result: null };
-  }
+const processBatch = (queue, transformer) => {
+  return queue.map((entry) => {
+    if (!validate(entry)) return null;
+    
+    try {
+      const transformed = transformer(entry.payload);
+      return transformed.toString('hex');
+    } catch (e) {
+      return null;
+    }
+  });
 };
 
-module.exports = { handler };
+/**
+ * factory for packet mutation logic
+ * @param {string} salt 
+ * @returns {function(Buffer): Buffer}
+ */
+const createHandler = (salt) => {
+  const saltBuf = Buffer.from(salt, 'utf8');
+  return (data) => Buffer.concat([data, saltBuf]);
+};
+
+module.exports = { processBatch, createHandler };
