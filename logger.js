@@ -1,31 +1,35 @@
-const memoizedBuffer = new Map();
-const MAX_CACHE = 1000;
+const fs = require('fs');
+const path = require('path');
+const { Writable } = require('stream');
 
-/**
- * optimized event logging with LRU-style
- * circular cache eviction for high-frequency crypto logs
- */
-function logCryptoEvent(level, data) {
-  const timestamp = Date.now();
-  const payload = JSON.stringify(data);
-  const key = `${timestamp}:${payload.slice(0, 32)}`;
+const LOG_DIR = './logs';
+const MAX_SIZE = 5 * 1024 * 1024;
+const LOG_FILE = path.join(LOG_DIR, 'crypto.log');
 
-  if (memoizedBuffer.size >= MAX_CACHE) {
-    const firstKey = memoizedBuffer.keys().next().value;
-    memoizedBuffer.delete(firstKey);
-  }
+if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR);
 
-  memoizedBuffer.set(key, { level, payload, timestamp });
-
-  if (process.env.NODE_ENV !== 'production') {
-    process.stdout.write(`[${level}] ${key}\n`);
+class RotatingStream extends Writable {
+  _write(chunk, encoding, callback) {
+    fs.stat(LOG_FILE, (err, stats) => {
+      if (!err && stats.size > MAX_SIZE) {
+        const timestamp = Date.now();
+        fs.renameSync(LOG_FILE, `${LOG_FILE}.${timestamp}.bak`);
+      }
+      fs.appendFile(LOG_FILE, chunk, callback);
+    });
   }
 }
 
-function flushLogs() {
-  const snapshot = Array.from(memoizedBuffer.values());
-  memoizedBuffer.clear();
-  return snapshot;
-}
+const logger = {
+  stream: new RotatingStream(),
+  info: (msg) => {
+    const entry = `[${new Date().toISOString()}] INFO: ${msg}\n`;
+    logger.stream.write(entry);
+  },
+  error: (msg) => {
+    const entry = `[${new Date().toISOString()}] ERROR: ${msg}\n`;
+    logger.stream.write(entry);
+  }
+};
 
-module.exports = { logCryptoEvent, flushLogs };
+module.exports = logger;
