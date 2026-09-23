@@ -1,32 +1,31 @@
-const fs = require('fs');
-const path = require('path');
+const memoizedBuffer = new Map();
+const MAX_CACHE = 1000;
 
-const LOG_DIR = './logs';
-const MAX_SIZE = 1024 * 1024 * 5;
+/**
+ * optimized event logging with LRU-style
+ * circular cache eviction for high-frequency crypto logs
+ */
+function logCryptoEvent(level, data) {
+  const timestamp = Date.now();
+  const payload = JSON.stringify(data);
+  const key = `${timestamp}:${payload.slice(0, 32)}`;
 
-if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR);
-
-const logger = (msg, level = 'INFO') => {
-  const logPath = path.join(LOG_DIR, 'crypto.log');
-  const timestamp = new Date().toISOString();
-  const entry = `[${timestamp}] [${level}] ${msg}\n`;
-
-  try {
-    const stats = fs.existsSync(logPath) ? fs.statSync(logPath) : { size: 0 };
-    
-    if (stats.size > MAX_SIZE) {
-      const backup = path.join(LOG_DIR, `crypto.${Date.now()}.log`);
-      fs.renameSync(logPath, backup);
-    }
-
-    fs.appendFileSync(logPath, entry);
-  } catch (err) {
-    process.stderr.write(`Logger failure: ${err.message}\n`);
+  if (memoizedBuffer.size >= MAX_CACHE) {
+    const firstKey = memoizedBuffer.keys().next().value;
+    memoizedBuffer.delete(firstKey);
   }
-};
 
-module.exports = {
-  info: (msg) => logger(msg, 'INFO'),
-  error: (msg) => logger(msg, 'ERROR'),
-  warn: (msg) => logger(msg, 'WARN')
-};
+  memoizedBuffer.set(key, { level, payload, timestamp });
+
+  if (process.env.NODE_ENV !== 'production') {
+    process.stdout.write(`[${level}] ${key}\n`);
+  }
+}
+
+function flushLogs() {
+  const snapshot = Array.from(memoizedBuffer.values());
+  memoizedBuffer.clear();
+  return snapshot;
+}
+
+module.exports = { logCryptoEvent, flushLogs };
