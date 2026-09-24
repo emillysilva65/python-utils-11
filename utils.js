@@ -1,29 +1,26 @@
-const retry = async (fn, retries = 3, delay = 1000) => {
-  let attempt = 0;
-  while (attempt < retries) {
+const retry = (fn, retries = 3, interval = 1000) => {
+  const attempt = async (n) => {
     try {
       return await fn();
     } catch (err) {
-      attempt++;
-      if (attempt >= retries) throw err;
-      const jitter = Math.random() * 200;
-      await new Promise(resolve => setTimeout(resolve, delay * attempt + jitter));
-      console.warn(`crypto-op failure: attempt ${attempt} failed, retrying...`);
+      if (n <= 0) throw err;
+      await new Promise(r => setTimeout(r, interval * (4 - n)));
+      return attempt(n - 1);
     }
+  };
+  return attempt(retries);
+};
+
+const withCryptoBackoff = async (operation, context = 'network-op') => {
+  const startTime = Date.now();
+  try {
+    const result = await retry(operation);
+    console.log(`[${context}] success after ${Date.now() - startTime}ms`);
+    return result;
+  } catch (e) {
+    console.error(`[${context}] permanent failure: ${e.message}`);
+    throw e;
   }
 };
 
-const withExponentialBackoff = (fn) => {
-  let factor = 1;
-  return async (...args) => {
-    try {
-      return await fn(...args);
-    } catch (e) {
-      factor *= 2;
-      await new Promise(r => setTimeout(r, 100 * factor));
-      return withExponentialBackoff(fn)(...args);
-    }
-  };
-};
-
-module.exports = { retry, withExponentialBackoff };
+module.exports = { retry, withCryptoBackoff };
