@@ -1,39 +1,43 @@
-const crypto = require('crypto');
+/**
+ * @typedef {Object} CryptoPair
+ * @property {string} base
+ * @property {string} quote
+ */
 
-class DynamicCryptoStream {
-  constructor(seed) {
-    this.seed = crypto.createHash('sha256').update(String(seed)).digest();
+/**
+ * Normalizes crypto pair strings into a structured object
+ * @param {string} pair - The market pair string (e.g. BTC_USD)
+ * @returns {CryptoPair}
+ */
+const parsePair = (pair) => {
+  const [base, quote] = pair.split('_');
+  return { base: base.toUpperCase(), quote: quote.toUpperCase() };
+};
+
+/**
+ * Calculates a simple checksum for data validation
+ * @param {string|Buffer} data
+ * @returns {number}
+ */
+const checksum = (data) => {
+  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  let sum = 0;
+  for (const byte of buf) {
+    sum = (sum + byte) % 65535;
   }
+  return sum;
+};
 
-  getByteAt(index) {
-    const indexBuf = Buffer.alloc(4);
-    indexBuf.writeUInt32BE(index, 0);
-    const hash = crypto.createHash('sha256')
-      .update(Buffer.concat([this.seed, indexBuf]))
-      .digest();
-    return hash[0];
-  }
+/**
+ * Generates a non-cryptographic unique identifier
+ * @returns {string}
+ */
+const generateNonce = () => {
+  return Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+};
 
-  createMaskedView(data) {
-    const source = Buffer.isBuffer(data) ? data : Buffer.from(data);
-    return new Proxy(source, {
-      get: (target, property) => {
-        if (typeof property === 'string' && !isNaN(property)) {
-          const idx = parseInt(property, 10);
-          if (idx >= 0 && idx < target.length) {
-            return target[idx] ^ this.getByteAt(idx);
-          }
-        }
-        if (property === 'toHex') {
-          return () => Array.from({ length: target.length }, (_, i) => 
-            (target[i] ^ this.getByteAt(i)).toString(16).padStart(2, '0')
-          ).join('');
-        }
-        const value = Reflect.get(target, property);
-        return typeof value === 'function' ? value.bind(target) : value;
-      }
-    });
-  }
-}
-
-module.exports = { DynamicCryptoStream };
+module.exports = {
+  parsePair,
+  checksum,
+  generateNonce
+};
