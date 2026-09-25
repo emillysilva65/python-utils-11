@@ -1,13 +1,13 @@
 # python-utils-11
 
-A robust toolkit designed to streamline crypto-asset management and blockchain data interactions. This library provides high-performance utilities for address validation, unit conversions, and secure transaction signing in JavaScript environments.
+A robust JavaScript toolkit for blockchain data processing and cryptocurrency market analysis. This library streamlines interaction with decentralized exchanges and provides high-performance utilities for crypto asset tracking.
 
 ## Features
 
-*   **Address Validator:** High-speed checksum verification and format validation for Ethereum (EIP-55) and Bitcoin (Bech32) addresses.
-*   **Precision Unit Converter:** Native BigInt support for safe conversions between Wei, Gwei, and Ether to prevent floating-point calculation errors.
-*   **Transaction Signer:** Lightweight utility for generating deterministic ECDSA signatures and managing cryptographic key pairs.
-*   **Rate-Limited API Wrapper:** Built-in concurrency control for querying major exchange pricing endpoints without triggering rate-limit bans.
+*   **Price Feed Aggregation:** Synchronous fetching of live ticker data from major CEX/DEX APIs with automatic fallback handling.
+*   **Wallet Analytics:** Lightweight module to parse transaction history and calculate net realized gains across multiple token standards.
+*   **Precision Math Utilities:** Handles floating-point arithmetic for ERC-20 token decimals to prevent rounding errors in swap calculations.
+*   **Signature Verification:** Streamlined implementation of EIP-712 typed data signing and address recovery for secure dApp authentication.
 
 ## Installation
 
@@ -23,23 +23,28 @@ Or via yarn:
 yarn add python-utils-11
 ```
 
-## Basic Usage
+## Usage
+
+Quickly retrieve market data or perform wallet calculations in your project:
 
 ```javascript
-const { CryptoUtils, UnitConverter } = require('python-utils-11');
+const { CryptoClient, MathUtils } = require('python-utils-11');
 
-// Validate an Ethereum address
-const isValid = CryptoUtils.isValidAddress('0x71C7656EC7ab88b098defB751B7401B5f6d8976F');
+// Initialize client
+const client = new CryptoClient({ apiKey: 'YOUR_API_KEY' });
 
-// Convert 1.5 ETH to Wei
-const weiAmount = UnitConverter.toWei('1.5', 'ether');
+// Fetch latest price
+client.getTicker('BTC-USDT').then(data => {
+  console.log(`Current price: ${data.lastPrice}`);
+});
 
-console.log(`Address Valid: ${isValid}`);
-console.log(`Amount in Wei: ${weiAmount.toString()}`);
+// Calculate token units safely
+const safeBalance = MathUtils.toHumanReadable('1000000000000000000', 18);
+console.log(`Wallet Balance: ${safeBalance} ETH`);
 ```
 
 ## License
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-Distributed under the MIT License. See `LICENSE` for more information.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
