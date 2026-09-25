@@ -1,51 +1,24 @@
-class FastCryptoCache {
-  constructor(size = 4096) {
-    this.size = size;
-    this.mask = size - 1;
-    this.keys = new Uint32Array(size);
-    this.values = new BigUint64Array(size);
+const validateInput = (data) => {
+  const schema = { hash: 'string', nonce: 'number' };
+  return Object.keys(schema).every(k => typeof data[k] === schema[k]);
+};
+
+const processCryptoPayloads = (queue) => {
+  const results = [];
+  for (const entry of queue) {
+    try {
+      if (!validateInput(entry)) {
+        throw new Error(`Malformed payload: ${JSON.stringify(entry)}`);
+      }
+      const hashDigest = Buffer.from(entry.hash, 'hex');
+      const combined = Buffer.concat([hashDigest, Buffer.from(entry.nonce.toString())]);
+      results.push(combined.toString('base64'));
+    } catch (e) {
+      console.error(`Skipping invalid frame: ${e.message}`);
+      continue;
+    }
   }
+  return results;
+};
 
-  hash(key) {
-    let h = Number(key & 0xffffffffn);
-    h ^= h >>> 16;
-    h = Math.imul(h, 0x85ebca6b);
-    h ^= h >>> 13;
-    h = Math.imul(h, 0xc2b2ae35);
-    h ^= h >>> 16;
-    return h & this.mask;
-  }
-
-  get(key) {
-    const idx = this.hash(key);
-    const lowKey = Number(key & 0xffffffffn);
-    return this.keys[idx] === lowKey ? this.values[idx] : null;
-  }
-
-  set(key, val) {
-    const idx = this.hash(key);
-    this.keys[idx] = Number(key & 0xffffffffn);
-    this.values[idx] = val;
-  }
-}
-
-const cache = new FastCryptoCache();
-
-export function optimizedModPow(base, exp, mod) {
-  if (mod === 1n) return 0n;
-  const cacheKey = (base ^ (exp << 16n) ^ (mod << 32n)) & 0xffffffffn;
-  const cached = cache.get(cacheKey);
-  if (cached !== null) return cached;
-
-  let result = 1n;
-  let b = base % mod;
-  let e = exp;
-  while (e > 0n) {
-    if (e % 2n === 1n) result = (result * b) % mod;
-    e >>= 1n;
-    b = (b * b) % mod;
-  }
-
-  cache.set(cacheKey, result);
-  return result;
-}
+module.exports = { processCryptoPayloads };
