@@ -1,49 +1,69 @@
 const crypto = require('crypto');
 
-function* fibonacciGenerator() {
-  let [a, b] = [1, 1];
-  while (true) {
-    yield a;
-    [a, b] = [b, a + b];
-  }
-}
+const PIPELINE_TRANSFORMS = Symbol('PIPELINE_TRANSFORMS');
 
-async function executeWithEntropyRetry(fn, opts = {}) {
-  const maxAttempts = opts.maxAttempts || 5;
-  const baseDelayMs = opts.baseDelayMs || 250;
-  const fib = fibonacciGenerator();
+class CryptoPipeline {
+    constructor(initialValue) {
+        this.val = initialValue;
+        this[PIPELINE_TRANSFORMS] = [];
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await fn({ attempt });
-    } catch (error) {
-      if (attempt === maxAttempts) {
-        throw new Error(`Execution failed after ${maxAttempts} attempts: ${error.message}`);
-      }
-
-      const fibFactor = fib.next().value;
-      const hashHex = crypto.createHash('sha256').update(`${attempt}:${Date.now()}`).digest('hex');
-      const jitterMs = parseInt(hashHex.substring(0, 4), 16) % 100;
-      const backoffDelay = (baseDelayMs * fibFactor) + jitterMs;
-
-      await new Promise(resolve => setTimeout(resolve, backoffDelay));
+        return new Proxy(this, {
+            get(target, prop) {
+                if (prop in target) return target[prop];
+                if (typeof CryptoHelpers[prop] === 'function') {
+                    return (...args) => {
+                        target.val = CryptoHelpers[prop](target.val, ...args);
+                        target[PIPELINE_TRANSFORMS].push(prop);
+                        return this;
+                    };
+                }
+            }
+        });
     }
-  }
+
+    unwrap() {
+        return this.val;
+    }
+
+    audit() {
+        return {
+            result: this.val,
+            history: [...this[PIPELINE_TRANSFORMS]]
+        };
+    }
 }
 
-async function fetchCryptoDataWithRetry(fetchFn, endpoint) {
-  return executeWithEntropyRetry(async ({ attempt }) => {
-    const response = await fetchFn(endpoint, {
-      headers: { 'X-Retry-Attempt': attempt.toString() }
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+const CryptoHelpers = {
+    toHex(data) {
+        if (Buffer.isBuffer(data)) return data.toString('hex');
+        return Buffer.from(String(data), 'utf8').toString('hex');
+    },
+
+    sha256(hexOrStr) {
+        const isHex = typeof hexOrStr === 'string' && /^[0-9a-fA-F]+$/.test(hexOrStr) && hexOrStr.length % 2 === 0;
+        const buf = isHex ? Buffer.from(hexOrStr, 'hex') : Buffer.from(String(hexOrStr));
+        return crypto.createHash('sha256').update(buf).digest('hex');
+    },
+
+    ripemd160(hexStr) {
+        const buf = Buffer.from(String(hexStr), 'hex');
+        return crypto.createHash('ripemd160').update(buf).digest('hex');
+    },
+
+    padKey(hexStr, length = 64) {
+        return String(hexStr).padStart(length, '0').slice(-length);
+    },
+
+    obfuscateAddress(addr) {
+        const str = String(addr);
+        if (str.length <= 10) return str;
+        return `${str.slice(0, 6)}...${str.slice(-4)}`;
     }
-    return await response.json();
-  }, { maxAttempts: 4, baseDelayMs: 300 });
-}
+};
+
+const pipe = (val) => new CryptoPipeline(val);
 
 module.exports = {
-  executeWithEntropyRetry,
-  fetchCryptoDataWithRetry
+    pipe,
+    ...CryptoHelpers
 };
