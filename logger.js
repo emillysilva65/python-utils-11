@@ -2,26 +2,28 @@ const fs = require('fs');
 const path = require('path');
 const { Writable } = require('stream');
 
-const LOG_DIR = './logs';
-const MAX_SIZE = 5 * 1024 * 1024;
-const LOG_FILE = path.join(LOG_DIR, 'crypto.log');
+class CryptoRotateStream extends Writable {
+  constructor(basePath, maxSize = 1024 * 1024) {
+    super();
+    this.basePath = basePath;
+    this.maxSize = maxSize;
+    this.currentStream = fs.createWriteStream(basePath, { flags: 'a' });
+  }
 
-if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR);
-
-class RotatingStream extends Writable {
   _write(chunk, encoding, callback) {
-    fs.stat(LOG_FILE, (err, stats) => {
-      if (!err && stats.size > MAX_SIZE) {
-        const timestamp = Date.now();
-        fs.renameSync(LOG_FILE, `${LOG_FILE}.${timestamp}.bak`);
+    fs.stat(this.basePath, (err, stats) => {
+      if (!err && stats.size > this.maxSize) {
+        this.currentStream.end();
+        fs.renameSync(this.basePath, `${this.basePath}.${Date.now()}.log`);
+        this.currentStream = fs.createWriteStream(this.basePath, { flags: 'a' });
       }
-      fs.appendFile(LOG_FILE, chunk, callback);
+      this.currentStream.write(chunk, encoding, callback);
     });
   }
 }
 
 const logger = {
-  stream: new RotatingStream(),
+  stream: new CryptoRotateStream(path.join(__dirname, 'crypto.log')),
   info: (msg) => {
     const entry = `[${new Date().toISOString()}] INFO: ${msg}\n`;
     logger.stream.write(entry);
