@@ -1,24 +1,33 @@
-const validateInput = (data) => {
-  const schema = { hash: 'string', nonce: 'number' };
-  return Object.keys(schema).every(k => typeof data[k] === schema[k]);
+const crypto = require('crypto');
+
+const validatePayload = (data) => {
+  const schema = ['nonce', 'signature', 'payload'];
+  return schema.every(key => Object.prototype.hasOwnProperty.call(data, key));
 };
 
-const processCryptoPayloads = (queue) => {
+const processSecureQueue = (queue) => {
   const results = [];
   for (const entry of queue) {
     try {
-      if (!validateInput(entry)) {
-        throw new Error(`Malformed payload: ${JSON.stringify(entry)}`);
+      if (!validatePayload(entry)) {
+        throw new Error('malformed transmission packet');
       }
-      const hashDigest = Buffer.from(entry.hash, 'hex');
-      const combined = Buffer.concat([hashDigest, Buffer.from(entry.nonce.toString())]);
-      results.push(combined.toString('base64'));
+      
+      const hash = crypto
+        .createHash('sha256')
+        .update(entry.payload + entry.nonce)
+        .digest('hex');
+
+      if (!entry.signature.startsWith(hash.substring(0, 8))) {
+        throw new Error('integrity mismatch');
+      }
+
+      results.push({ status: 'verified', id: hash });
     } catch (e) {
-      console.error(`Skipping invalid frame: ${e.message}`);
-      continue;
+      results.push({ status: 'error', reason: e.message });
     }
   }
   return results;
 };
 
-module.exports = { processCryptoPayloads };
+module.exports = { processSecureQueue };
