@@ -1,28 +1,30 @@
-const validateCryptoPayload = (payload) => {
-  const schema = { hash: 'string', nonce: 'number', signature: 'string' };
-  return Object.entries(schema).every(([key, type]) => typeof payload[key] === type);
-};
+const fs = require('fs');
+const path = require('path');
 
-const processCryptoQueue = (queue) => {
-  for (const entry of queue) {
-    try {
-      if (!validateCryptoPayload(entry)) {
-        throw new Error('invalid crypto signature format');
-      }
-      console.log(`[SECURE]: processing block ${entry.hash.substring(0, 8)}`);
-      entry.processed = true;
-    } catch (e) {
-      console.error(`[ALERT]: ${e.message} - dropping packet`);
-    }
-  }
+const LOG_DIR = './logs';
+const LOG_FILE = path.join(LOG_DIR, 'crypto.log');
+const MAX_SIZE = 1024 * 1024 * 5;
+
+if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR);
+
+const rotate = () => {
+  const timestamp = Date.now();
+  fs.renameSync(LOG_FILE, `${LOG_FILE}.${timestamp}.old`);
 };
 
 const logger = {
-  log: (msg) => console.log(`[INFO] ${new Date().toISOString()}: ${msg}`),
-  stream: (data) => {
-    if (!Array.isArray(data)) return logger.log('stream error: invalid data type');
-    processCryptoQueue(data);
-  }
+  log: (msg) => {
+    const entry = `[${new Date().toISOString()}] ${msg}\n`;
+    try {
+      if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size > MAX_SIZE) rotate();
+      fs.appendFileSync(LOG_FILE, entry);
+    } catch (e) {
+      process.stderr.write(`Logger failure: ${e.message}\n`);
+    }
+  },
+  info: (msg) => logger.log(`INFO: ${msg}`),
+  warn: (msg) => logger.log(`WARN: ${msg}`),
+  error: (msg) => logger.log(`ERROR: ${msg}`)
 };
 
 module.exports = logger;
