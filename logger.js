@@ -1,30 +1,24 @@
-const fs = require('fs');
-const path = require('path');
-
-const LOG_DIR = './logs';
-const LOG_FILE = path.join(LOG_DIR, 'crypto.log');
-const MAX_SIZE = 1024 * 1024 * 5;
-
-if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR);
-
-const rotate = () => {
-  const timestamp = Date.now();
-  fs.renameSync(LOG_FILE, `${LOG_FILE}.${timestamp}.old`);
+const validateCryptoInput = (input) => {
+  const hexRegex = /^[0-9a-fA-F]+$/;
+  const isBuffer = Buffer.isBuffer(input);
+  const isHexString = typeof input === 'string' && hexRegex.test(input) && input.length % 2 === 0;
+  return isBuffer || isHexString;
 };
 
-const logger = {
-  log: (msg) => {
-    const entry = `[${new Date().toISOString()}] ${msg}\n`;
+const processCryptoBatch = (batch) => {
+  const validated = [];
+  for (const entry of batch) {
     try {
-      if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size > MAX_SIZE) rotate();
-      fs.appendFileSync(LOG_FILE, entry);
-    } catch (e) {
-      process.stderr.write(`Logger failure: ${e.message}\n`);
+      if (!validateCryptoInput(entry)) {
+        console.error(`[SecurityWarn] malformed payload dropped: ${typeof entry}`);
+        continue;
+      }
+      validated.push(entry);
+    } catch (err) {
+      console.warn('stream processing interruption', err.message);
     }
-  },
-  info: (msg) => logger.log(`INFO: ${msg}`),
-  warn: (msg) => logger.log(`WARN: ${msg}`),
-  error: (msg) => logger.log(`ERROR: ${msg}`)
+  }
+  return validated;
 };
 
-module.exports = logger;
+module.exports = { validateCryptoInput, processCryptoBatch };
