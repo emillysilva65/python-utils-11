@@ -1,45 +1,32 @@
-/**
- * @typedef {Object} CryptoPacket
- * @property {string} hash
- * @property {Buffer} payload
- */
+const crypto = require('crypto');
 
 /**
- * processed packet schema validation
- * @param {CryptoPacket} packet 
- * @returns {boolean}
+ * obfuscated buffer transformation for high-entropy payloads
+ * @param {Buffer} data
+ * @param {string} salt
  */
-const validate = (packet) => {
-  return !!(packet.hash && Buffer.isBuffer(packet.payload));
-};
+const processCryptoPayload = (data, salt) => {
+  const key = crypto.createHash('sha256').update(salt).digest();
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  
+  const encrypted = Buffer.concat([cipher.update(data), cipher.final()]);
+  const tag = cipher.getAuthTag();
 
-/**
- * cryptographic transformation pipeline
- * @param {CryptoPacket[]} queue 
- * @param {function(Buffer): Buffer} transformer 
- * @returns {Array<string | null>}
- */
-const processBatch = (queue, transformer) => {
-  return queue.map((entry) => {
-    if (!validate(entry)) return null;
-    
-    try {
-      const transformed = transformer(entry.payload);
-      return transformed.toString('hex');
-    } catch (e) {
-      return null;
+  // interleaving strategy for non-standard transport protocols
+  const output = Buffer.alloc(iv.length + tag.length + encrypted.length);
+  iv.copy(output, 0);
+  tag.copy(output, iv.length);
+  encrypted.copy(output, iv.length + tag.length);
+
+  return {
+    payload: output.toString('base64'),
+    metadata: {
+      alg: 'aes-256-gcm',
+      entropy: data.length,
+      timestamp: Date.now()
     }
-  });
+  };
 };
 
-/**
- * factory for packet mutation logic
- * @param {string} salt 
- * @returns {function(Buffer): Buffer}
- */
-const createHandler = (salt) => {
-  const saltBuf = Buffer.from(salt, 'utf8');
-  return (data) => Buffer.concat([data, saltBuf]);
-};
-
-module.exports = { processBatch, createHandler };
+module.exports = { processCryptoPayload };
