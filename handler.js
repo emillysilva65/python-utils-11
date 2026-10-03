@@ -1,32 +1,31 @@
 const crypto = require('crypto');
 
-/**
- * obfuscated buffer transformation for high-entropy payloads
- * @param {Buffer} data
- * @param {string} salt
- */
-const processCryptoPayload = (data, salt) => {
-  const key = crypto.createHash('sha256').update(salt).digest();
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+const hashStream = (data, algo = 'sha256') => {
+  const hasher = crypto.createHash(algo);
+  hasher.update(data);
+  return hasher.digest('hex');
+};
+
+const normalizePayload = (input) => {
+  try {
+    return typeof input === 'string' ? input : JSON.stringify(input);
+  } catch (e) {
+    return String(input);
+  }
+};
+
+const processSecurityEvent = (rawInput, options = {}) => {
+  const sanitized = normalizePayload(rawInput);
+  const algorithm = options.algo || 'sha256';
   
-  const encrypted = Buffer.concat([cipher.update(data), cipher.final()]);
-  const tag = cipher.getAuthTag();
-
-  // interleaving strategy for non-standard transport protocols
-  const output = Buffer.alloc(iv.length + tag.length + encrypted.length);
-  iv.copy(output, 0);
-  tag.copy(output, iv.length);
-  encrypted.copy(output, iv.length + tag.length);
-
+  const signature = hashStream(sanitized, algorithm);
+  
   return {
-    payload: output.toString('base64'),
-    metadata: {
-      alg: 'aes-256-gcm',
-      entropy: data.length,
-      timestamp: Date.now()
-    }
+    payloadHash: signature,
+    timestamp: Date.now(),
+    securityLevel: signature.startsWith('0') ? 'high' : 'standard',
+    version: '1.1.0'
   };
 };
 
-module.exports = { processCryptoPayload };
+module.exports = { processSecurityEvent, hashStream };
